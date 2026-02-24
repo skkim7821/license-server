@@ -1,0 +1,48 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Product {
+  code          String    @id
+  name          String
+  maxDevices    Int
+  defaultPeriod Int
+  licenses      License[]
+}
+
+model License {
+  id          String         @id @default(cuid())
+  email       String
+  productCode String
+  expiresAt   DateTime
+  status      LicenseStatus  @default(active)
+  maxDevices  Int
+  product     Product        @relation(fields: [productCode], references: [code])
+  devices     LicenseDevice[]
+
+  @@unique([email, productCode])
+}
+
+model LicenseDevice {
+  id          String   @id @default(cuid())
+  licenseId   String
+  ipAddr      String
+  createdAt   DateTime @default(now())
+  license     License  @relation(fields: [licenseId], references: [id])
+
+  @@unique([licenseId, ipAddr])
+}
+
+enum LicenseStatus {
+  active
+  revoked
+  expired
+}

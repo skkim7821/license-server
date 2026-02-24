@@ -1,0 +1,41 @@
+{
+  "name": "license-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "ensure-tmp": "node -e \"require('fs').mkdirSync('./tmp', { recursive: true });\"",
+    "dev": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp NODE_ENV=development tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/src/server.js",
+    "test": "vitest run",
+    "prisma": "prisma",
+    "db:bootstrap": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts",
+    "db:reset": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts --reset"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.20.0",
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/env": "^5.0.3",
+    "@fastify/swagger": "^9.6.1",
+    "@fastify/swagger-ui": "^5.2.4",
+    "@prisma/adapter-better-sqlite3": "^7.3.0",
+    "@prisma/client": "^7.3.0",
+    "bindings": "^1.5.0",
+    "date-fns": "^4.1.0",
+    "fastify": "^5.7.1",
+    "prisma": "^7.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "cross-env": "^10.1.0",
+    "dotenv": "^17.2.3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
