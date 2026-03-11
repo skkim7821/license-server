@@ -37,10 +37,95 @@
 4. 로그 확인:
    - `docker compose logs -f license-server`
 5. 접속 확인:
-   - `http://서버IP:3000/health`
-   - `http://서버IP:3000/docs`
+   - `http://서버IP/health`
+   - `http://서버IP/docs`
 
 `docker-compose.yml`은 `./db`를 `/app/db`로 마운트하므로 컨테이너 재시작 후에도 SQLite 데이터가 유지됩니다.
+
+## 서버 운영 라이프사이클 커맨드
+아래 명령은 현재 구성(포트 80, `./db` SQLite 볼륨, Docker Compose) 기준입니다.
+
+### 1) 최초 1회 세팅
+```bash
+cd /opt/license-server
+cat > .env <<'EOF'
+ADMIN_TOKEN=change_me_to_strong_token
+EOF
+```
+
+GHCR private 이미지를 쓰는 경우:
+```bash
+echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+```
+
+### 2) 첫 배포
+Dockerfile build 방식:
+```bash
+docker compose up -d --build
+```
+
+GHCR image pull 방식:
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### 3) 상태 확인
+```bash
+docker compose ps
+docker compose logs -f license-server
+docker compose top
+curl -fsS http://127.0.0.1/health
+```
+
+### 4) 업데이트 배포
+image pull 방식:
+```bash
+docker compose pull
+docker compose up -d
+docker compose logs -f --tail=100 license-server
+```
+
+build 방식:
+```bash
+docker compose up -d --build
+```
+
+### 5) 롤백
+`docker-compose.yml`의 `image` 태그를 이전 버전으로 변경 후:
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### 6) DB 백업/복구 (SQLite)
+백업:
+```bash
+tar -czf backup-db-$(date +%F-%H%M).tar.gz db
+```
+
+복구(서비스 중지 후):
+```bash
+docker compose down
+tar -xzf backup-db-YYYY-MM-DD-HHMM.tar.gz
+docker compose up -d
+```
+
+### 7) 재시작/중지/정리
+```bash
+docker compose restart license-server
+docker compose stop
+docker compose down
+docker compose down --remove-orphans
+```
+
+### 8) 디스크 정리
+```bash
+docker image prune -f
+docker container prune -f
+```
+
+주의: `docker volume prune -f`는 다른 프로젝트 볼륨도 지울 수 있으므로 신중히 사용하세요.
 
 ## API 요약
 ### 관리자 API (`/admin/*`, 보호됨)
