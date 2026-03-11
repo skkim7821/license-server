@@ -1,0 +1,16 @@
+services:
+  license-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: license-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: file:./db/prod.db
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+    volumes:
+      - ./db:/app/db

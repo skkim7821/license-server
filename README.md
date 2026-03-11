@@ -25,6 +25,22 @@
 ## 추가 커맨드
 - `pnpm test`: `vitest`를 이용한 단위 테스트 실행 (`src/routes/*.test.ts`)
 - `pnpm run prisma`: Prisma CLI로 마이그레이션/스크립트 관리
+- `pnpm run db:bootstrap:no-seed`: 샘플 데이터 없이 스키마만 초기화
+
+## 서버 배포 (Docker Compose)
+1. 서버에 코드 배포 후 루트 디렉터리 이동
+2. 환경변수 준비:
+   - 예: `ADMIN_TOKEN=your-strong-token`
+   - 필요 시 `DATABASE_URL`은 기본값(`file:./db/prod.db`) 유지 가능
+3. 컨테이너 실행:
+   - `docker compose up -d --build`
+4. 로그 확인:
+   - `docker compose logs -f license-server`
+5. 접속 확인:
+   - `http://서버IP:3000/health`
+   - `http://서버IP:3000/docs`
+
+`docker-compose.yml`은 `./db`를 `/app/db`로 마운트하므로 컨테이너 재시작 후에도 SQLite 데이터가 유지됩니다.
 
 ## API 요약
 ### 관리자 API (`/admin/*`, 보호됨)

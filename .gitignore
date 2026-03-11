@@ -11,3 +11,4 @@ db/*.db-wal
 
 .pnpm-store/
 dist/
+.DS_Store
