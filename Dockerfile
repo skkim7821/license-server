@@ -10,10 +10,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY tsconfig.json prisma.config.ts ./
-COPY generated ./generated
 COPY prisma ./prisma
 COPY src ./src
+RUN pnpm prisma generate
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "pnpm prisma generate && pnpm prisma db push && pnpm start:prod"]
+CMD ["sh", "-c", "pnpm prisma db push && pnpm start:prod"]
