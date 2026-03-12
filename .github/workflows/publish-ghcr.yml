@@ -76,6 +76,25 @@ jobs:
             "export DEPLOY_PATH='${DEPLOY_PATH}' GHCR_USERNAME='${GHCR_USERNAME}' GHCR_TOKEN='${GHCR_TOKEN}'; bash -se" << 'EOF'
           set -euo pipefail
 
+          case "${DEPLOY_PATH}" in
+            "~")
+              DEPLOY_PATH="${HOME}"
+              ;;
+            "~/"*)
+              DEPLOY_PATH="${HOME}/${DEPLOY_PATH#~/}"
+              ;;
+          esac
+
+          if [ ! -d "${DEPLOY_PATH}" ]; then
+            echo "DEPLOY_PATH does not exist: ${DEPLOY_PATH}"
+            exit 1
+          fi
+
+          if [ ! -d "${DEPLOY_PATH}/.git" ]; then
+            echo "DEPLOY_PATH is not a git repo: ${DEPLOY_PATH}"
+            exit 1
+          fi
+
           cd "${DEPLOY_PATH}"
           git pull --ff-only
 
