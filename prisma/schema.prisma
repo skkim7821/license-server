@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model Product {
@@ -18,13 +18,36 @@ model Product {
   licenses      License[]
 }
 
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  licenses  License[]
+}
+
+model AdminUser {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  role         AdminRole   @default(super_admin)
+  status       AdminStatus @default(active)
+  lastLoginAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
 model License {
   id          String         @id @default(cuid())
+  licenseKey  String         @unique
   email       String
+  userId      String?
   productCode String
   expiresAt   DateTime
   status      LicenseStatus  @default(active)
   maxDevices  Int
+  user        User?          @relation(fields: [userId], references: [id])
   product     Product        @relation(fields: [productCode], references: [code])
   devices     LicenseDevice[]
 
@@ -45,4 +68,14 @@ enum LicenseStatus {
   active
   revoked
   expired
+}
+
+enum AdminRole {
+  super_admin
+  operator
+}
+
+enum AdminStatus {
+  active
+  disabled
 }

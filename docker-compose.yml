@@ -1,16 +1,34 @@
 services:
+  postgres:
+    image: postgres:16
+    container_name: license-server-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: license_server
+      POSTGRES_USER: license
+      POSTGRES_PASSWORD: license
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   license-server:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: license-server
     restart: unless-stopped
+    depends_on:
+      - postgres
     ports:
       - "80:80"
     environment:
       NODE_ENV: production
       PORT: 80
-      DATABASE_URL: file:./db/prod.db
+      DATABASE_URL: ${DATABASE_URL:-postgresql://license:license@postgres:5432/license_server?schema=public}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
-    volumes:
-      - ./db:/app/db
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+volumes:
+  postgres_data:

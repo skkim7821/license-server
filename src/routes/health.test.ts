@@ -4,14 +4,15 @@ import { healthRoutesFactory } from "./health";
 
 type HealthRoutePrisma = Parameters<typeof healthRoutesFactory>[0];
 
-const createStub = (shouldFail = false): HealthRoutePrisma => ({
-  $queryRawUnsafe: async () => {
-    if (shouldFail) {
-      throw new Error("boom-db");
-    }
-    return 1;
-  },
-});
+const createStub = (shouldFail = false): HealthRoutePrisma =>
+  ({
+    $queryRawUnsafe: async () => {
+      if (shouldFail) {
+        throw new Error("boom-db");
+      }
+      return 1;
+    },
+  }) as unknown as HealthRoutePrisma;
 
 async function buildApp(prismaStub: HealthRoutePrisma) {
   const app = Fastify();

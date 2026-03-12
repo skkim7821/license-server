@@ -1,12 +1,11 @@
 import { PrismaClient } from "../generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { databaseUrl, ensureDatabaseDirectory } from "./db/config";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-ensureDatabaseDirectory(databaseUrl);
+const databaseUrl =
+  process.env["DATABASE_URL"] ?? "postgresql://license:license@localhost:5432/license_server?schema=public";
 
-const prisma = new PrismaClient({
-  adapter: new PrismaBetterSqlite3({ url: databaseUrl }),
-});
+const adapter = new PrismaPg({ connectionString: databaseUrl });
+const prisma: any = new PrismaClient({ adapter });
 let initialized = false;
 
 export async function initDb(): Promise<void> {
@@ -15,7 +14,6 @@ export async function initDb(): Promise<void> {
   }
 
   await prisma.$connect();
-  await prisma.$executeRawUnsafe("PRAGMA journal_mode=WAL;");
   initialized = true;
 }
 

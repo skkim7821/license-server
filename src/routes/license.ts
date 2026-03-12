@@ -1,14 +1,13 @@
 import { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { isAfter } from "date-fns";
-import type { Prisma, PrismaClient } from "../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { prisma } from "../db";
 
 const verifyLicensePayloadSchema = {
   type: "object",
-  required: ["email", "productCode"],
+  required: ["licenseKey"],
   properties: {
-    email: { type: "string", format: "email" },
-    productCode: { type: "string" },
+    licenseKey: { type: "string" },
     ipAddr: { type: "string", nullable: true },
   },
 };
@@ -71,8 +70,7 @@ const userInfoErrorSchema = {
 };
 
 type VerifyLicenseBody = {
-  email: string;
-  productCode: string;
+  licenseKey: string;
   ipAddr?: string;
 };
 
@@ -91,7 +89,7 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
     {
       schema: {
         summary: "Verify an active license",
-        description: "Validates a license by email+product and registers the caller IP.",
+        description: "Validates a license by license key and registers the caller IP.",
         tags: ["license"],
         body: verifyLicensePayloadSchema,
         response: {
@@ -104,14 +102,15 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
       attachValidation: true,
     },
     async (request, reply) => {
-      const { email, productCode, ipAddr: providedIpAddr } = request.body as VerifyLicenseBody;
+      const {
+        licenseKey: rawLicenseKey,
+        ipAddr: providedIpAddr,
+      } = request.body as VerifyLicenseBody;
+      const normalizedLicenseKey = rawLicenseKey?.trim().toUpperCase();
 
-      if (!email || !productCode) {
+      if (!normalizedLicenseKey) {
         return reply.status(400).send({ valid: false, reason: "missing_fields" });
       }
-
-      const normalizedEmail = email.toLowerCase().trim();
-      const normalizedProductCode = productCode.trim().toUpperCase();
       const forwardedHeader = Array.isArray(request.headers["x-forwarded-for"])
         ? request.headers["x-forwarded-for"][0]
         : request.headers["x-forwarded-for"];
@@ -130,10 +129,7 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
 
       const license = await prismaInstance.license.findUnique({
         where: {
-          email_productCode: {
-            email: normalizedEmail,
-            productCode: normalizedProductCode,
-          },
+          licenseKey: normalizedLicenseKey,
         },
         include: {
           devices: true,

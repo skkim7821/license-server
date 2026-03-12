@@ -10,13 +10,20 @@
 - 관리자 화면(또는 관리자 API)에서 사용자 추가/수정, 라이선스 삭제/연장/만료/상태변경 가능
 - 신규 서버에서 seed 데이터로 즉시 테스트 가능
 
+## 진행 현황 (2026-03-12)
+- Phase 2 완료: PostgreSQL 전환, baseline migration 정리, docker-compose postgres 반영
+- Phase 3 완료: `/license/verify`를 `licenseKey` 전용으로 전환, 레거시 `email+productCode` 검증 경로 제거
+- Phase 4 진행: `AdminUser` + JWT 로그인 구현, `ADMIN_TOKEN`은 전환기간 fallback으로 유지, `operator/super_admin` 권한 분기 적용
+- Phase 5 진행: `seed:dev`/`seed:prod` 분리 및 bootstrap seed mode 도입
+- Phase 7 진행: `apps/admin-web`(React + SCSS + Vite) 스캐폴드/로그인/사용자/라이선스 화면 및 API 연동 구현, 빌드 검증 완료
+
 ## 1. 현재 상태(코드 기준)
 
 ### 1.1 데이터 모델
 현재 `prisma/schema.prisma`:
-- `datasource db.provider = "sqlite"`
+- `datasource db.provider = "postgresql"`
 - `Product(code PK, name, maxDevices, defaultPeriod)`
-- `License(id, email, productCode FK, expiresAt, status, maxDevices)`
+- `License(id, licenseKey, email, productCode FK, expiresAt, status, maxDevices)`
   - 유니크: `@@unique([email, productCode])`
 - `LicenseDevice(id, licenseId FK, ipAddr, createdAt)`
   - 유니크: `@@unique([licenseId, ipAddr])`
@@ -24,30 +31,33 @@
 
 ### 1.2 검증 로직
 현재 `src/routes/license.ts`:
-- `POST /license/verify` 입력: `email + productCode (+ ipAddr)`
-- 조회 키: `(email, productCode)`
+- `POST /license/verify` 입력: `licenseKey (+ ipAddr)` 우선, `email + productCode` 레거시 병행
+- 조회 키: `licenseKey` 우선, 레거시 `(email, productCode)` fallback
 - 만료시 `status=expired`로 갱신 후 거부
 - `LicenseDevice`로 IP 기반 디바이스 제한 관리
 
 ### 1.3 관리자 기능
 현재 `src/routes/admin.ts`:
-- 인증: 정적 토큰 `ADMIN_TOKEN` (Bearer)
+- 인증: `/admin/login`(환경변수 기반) + Bearer 토큰 `ADMIN_TOKEN`
 - 제공 API:
+  - `POST /admin/login`
   - `POST /admin/products`
   - `GET /admin/products`
-  - `POST /admin/licenses` (email 기반 발급)
+  - `POST /admin/licenses` (licenseKey 자동 생성)
   - `GET /admin/licenses` (email 오름차순)
   - `POST /admin/bulk/licenses`
+  - `PATCH /admin/licenses/:id/extend`
+  - `PATCH /admin/licenses/:id/status`
+  - `DELETE /admin/licenses/:id`
 - 미구현:
-  - 관리자 계정/권한(Role) 모델
-  - 라이선스 수정/연장/만료처리/삭제 API
+  - 관리자 계정/권한(Role) DB 모델
   - 사용자 엔티티 CRUD
 
 ### 1.4 DB 연결/초기화
 현재 `src/db.ts`, `src/db/bootstrap.ts`:
-- `@prisma/adapter-better-sqlite3` 사용
-- SQLite 전용 디렉터리/파일 처리 로직 존재
-- bootstrap seed는 `Product + License(email) + LicenseDevice` 샘플 데이터 생성
+- `@prisma/adapter-pg` 사용
+- PostgreSQL migration 기반 bootstrap/reset 동작
+- bootstrap seed는 `Product + License(licenseKey 포함) + LicenseDevice` 샘플 데이터 생성
 
 ### 1.5 구현 전 충돌 지점(선해결 필요)
 - Prisma schema와 migration SQL의 컬럼 불일치(`ipAddr` vs `fingerprint`)
@@ -81,7 +91,7 @@
 
 ### 2.3 라이선스 키 포맷
 운영 최소안(가독성 + 유효성):
-- 예시: `LIC-XXXX-XXXX-XXXX-XXXX` (대문자, 숫자)
+- 예시: `LIC-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX` (대문자, 숫자)
 - 저장: 원문 저장 + 인덱스/유니크
 - API 입력은 공백/하이픈 정규화 후 검증
 
@@ -235,49 +245,79 @@
 - 운영 전환 체크리스트 완료
 - 롤백 전략 및 백업 복구 절차 확인
 
+## Phase 7. Frontend (React + SCSS + Vite)
+목표: 기존 `/admin-ui` 인라인 페이지를 React 기반 운영 화면으로 전환
+
+작업:
+- Vite + React + TypeScript 프론트엔드 앱 생성 (`apps/admin-web` 권장)
+- 스타일 체계 SCSS로 통일
+  - 글로벌 토큰(`colors`, `spacing`, `typography`)을 `src/styles`에 분리
+  - 컴포넌트 단위 SCSS 모듈 또는 페이지 단위 SCSS 규칙 확정
+- API 클라이언트 계층 분리
+  - `src/lib/api.ts`에서 공통 fetch 래퍼 구현
+  - Bearer 토큰 주입/401 처리/에러 표준화
+- 인증 플로우 구현
+  - 로그인 페이지(`/login`)
+  - 토큰 저장(localStorage) + 보호 라우트
+  - 로그아웃 처리
+- 관리자 화면 구현(최소)
+  - 대시보드 개요(사용자 수/라이선스 수/만료 임박 수)
+  - 사용자 페이지: 목록/생성/수정
+  - 라이선스 페이지: 목록/필터/연장/상태 변경/삭제
+- 백엔드 연동 방식 확정
+  - 개발 환경: Vite proxy(`/admin`, `/license` -> backend)
+  - 배포 환경: backend 정적 서빙 또는 별도 Nginx 배포 중 하나 선택
+- 기존 `/admin-ui` 라우트는 fallback으로 유지 후 전환 완료 시 제거
+
+완료 기준(DoD):
+- React 앱에서 로그인 후 운영 필수 CRUD가 가능
+- SCSS 기준 스타일 구조(글로벌 + 페이지/컴포넌트)가 정리됨
+- `pnpm dev`(backend) + `pnpm --filter admin-web dev`(frontend) 동시 개발 가능
+- 최소 e2e 시나리오(로그인 -> 사용자 생성 -> 라이선스 상태 변경) 수동 검증 완료
+
 ## 4. 구현 체크리스트
 
 ## 4.1 Phase 1 체크리스트
-- [ ] 현재 Prisma 스키마 ERD/필드 요약 문서화
-- [ ] email 기반 검증 흐름도 작성
-- [ ] 관리자 API 현행 기능/누락 기능 목록 확정
-- [ ] 기준선 테스트 결과 기록
+- [x] 현재 Prisma 스키마 ERD/필드 요약 문서화
+- [x] email 기반 검증 흐름도 작성
+- [x] 관리자 API 현행 기능/누락 기능 목록 확정
+- [x] 기준선 테스트 결과 기록
 
 ## 4.2 Phase 2 체크리스트
-- [ ] Prisma datasource를 PostgreSQL로 변경
-- [ ] SQLite 어댑터/파일 유틸 제거
-- [ ] PostgreSQL migration 재생성
-- [ ] docker-compose에 postgres 추가
-- [ ] `.env.example`/README 환경변수 갱신
+- [x] Prisma datasource를 PostgreSQL로 변경
+- [x] SQLite 어댑터/파일 유틸 제거
+- [x] PostgreSQL migration 재생성
+- [x] docker-compose에 postgres 추가
+- [x] `.env.example`/README 환경변수 갱신
 - [ ] 로컬 PostgreSQL에서 전체 테스트 통과
 
 ## 4.3 Phase 3 체크리스트
-- [ ] `User` 모델 추가
-- [ ] `License.licenseKey` 유니크 필드 추가
-- [ ] `License.userId` FK 추가
-- [ ] licenseKey 생성 유틸 구현 및 테스트
-- [ ] `/license/verify` 요청 스펙 변경
-- [ ] 검증 로직을 licenseKey 기준으로 변경
-- [ ] 기존 email 의존 로직 제거 또는 legacy 분리
+- [x] `User` 모델 추가
+- [x] `License.licenseKey` 유니크 필드 추가
+- [x] `License.userId` FK 추가
+- [x] licenseKey 생성 유틸 구현 및 테스트
+- [x] `/license/verify` 요청 스펙 변경
+- [x] 검증 로직을 licenseKey 기준으로 변경
+- [x] 기존 email 의존 로직 제거 또는 legacy 분리
 
 ## 4.4 Phase 4 체크리스트
-- [ ] `AdminUser` 모델 및 role 필드 추가
-- [ ] 관리자 로그인 API 구현
-- [ ] 인증 미들웨어(JWT/세션) 적용
-- [ ] 사용자 생성/수정/조회 API 구현
-- [ ] 라이선스 생성/삭제/연장/상태변경 API 구현
-- [ ] 관리자 UI 로그인/목록/수정 액션 구현
-- [ ] 권한별 접근제어 테스트 작성
+- [x] `AdminUser` 모델 및 role 필드 추가
+- [x] 관리자 로그인 API 구현
+- [x] 인증 미들웨어(JWT/세션) 적용
+- [x] 사용자 생성/수정/조회 API 구현
+- [x] 라이선스 생성/삭제/연장/상태변경 API 구현
+- [x] 관리자 UI 로그인/목록/수정 액션 구현
+- [x] 권한별 접근제어 테스트 작성
 
 ## 4.5 Phase 5 체크리스트
-- [ ] 개발용 seed 작성
-- [ ] 운영용 seed 작성(최소 관리자만)
-- [ ] seed 실행 명령 분리(`seed:dev`, `seed:prod` 등)
-- [ ] 신규 서버 부트스트랩 문서화
-- [ ] seed 이후 스모크 테스트 절차 문서화
+- [x] 개발용 seed 작성
+- [x] 운영용 seed 작성(최소 관리자만)
+- [x] seed 실행 명령 분리(`seed:dev`, `seed:prod` 등)
+- [x] 신규 서버 부트스트랩 문서화
+- [x] seed 이후 스모크 테스트 절차 문서화
 
 ## 4.6 Phase 6 체크리스트
-- [ ] 기존 데이터 이관 스크립트 또는 절차 정리
+- [x] 기존 데이터 이관 스크립트 또는 절차 정리
 - [ ] 관리자 액션 감사 로그 도입
 - [ ] 전환 리허설 수행
 - [ ] 백업/복구/롤백 시나리오 검증
@@ -289,10 +329,11 @@
 4. 관리자 인증 전환 + 운영 CRUD(Phase 4)
 5. seed 전략 분리 및 배포 자동화(Phase 5)
 6. 운영 전환 리허설(Phase 6)
+7. React + SCSS + Vite 프론트엔드 전환(Phase 7)
 
 ## 6. 즉시 착수 TODO (다음 작업 단위)
-- [ ] schema vs migration 불일치 항목 확정 및 기준안 선택(`ipAddr` 또는 `fingerprint`)
-- [ ] `db push` 사용 지점을 `migrate` 체계로 치환하는 변경안 작성
-- [ ] `ADMIN_TOKEN` 제거/병행 기간 정책 확정
-- [ ] `license/verify` legacy 병행 여부 및 종료 시점 확정
-- [ ] Phase 0 완료 기준 승인 후 Phase 2 착수
+- [x] schema vs migration 불일치 항목 확정 및 기준안 선택(`ipAddr` 또는 `fingerprint`)
+- [x] `db push` 사용 지점을 `migrate` 체계로 치환하는 변경안 작성
+- [x] `ADMIN_TOKEN` 제거/병행 기간 정책 확정
+- [x] `license/verify` legacy 병행 여부 및 종료 시점 확정
+- [x] Phase 0 완료 기준 승인 후 Phase 2 착수

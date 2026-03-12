@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginAsync } from "fastify";
-import type { PrismaClient } from "../generated/prisma/client";
+import type { PrismaClient } from "../../generated/prisma/client";
 import { prisma } from "../db";
 
 const healthResponseSchema = {

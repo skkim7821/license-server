@@ -1,0 +1,264 @@
+@use "./variables" as *;
+@use "./mixins" as *;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Noto Sans KR", sans-serif;
+  color: $color-text;
+  background: radial-gradient(circle at top right, #d6ebff 0%, $color-bg 45%);
+  line-height: 1.45;
+}
+
+a {
+  color: inherit;
+}
+
+.btn {
+  border: none;
+  padding: 10px 14px;
+  border-radius: $radius-sm;
+  background: $color-brand;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn.secondary {
+  background: #fff;
+  border: 1px solid $color-border;
+  color: $color-text;
+}
+
+.btn.danger {
+  background: $color-danger;
+}
+
+.card {
+  @include card;
+  padding: $space-3;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  border-right: 1px solid $color-border;
+  padding: $space-4;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+
+.brand-block {
+  display: grid;
+  gap: 4px;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.brand-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: $color-muted;
+}
+
+.menu {
+  display: grid;
+  gap: $space-1;
+}
+
+.menu a {
+  text-decoration: none;
+  color: $color-muted;
+  padding: 8px 10px;
+  border-radius: $radius-sm;
+}
+
+.menu a.active {
+  color: #fff;
+  background: $color-brand;
+}
+
+.auth-meta {
+  margin-top: auto;
+  display: grid;
+  gap: $space-1;
+  font-size: 13px;
+  color: $color-muted;
+}
+
+.app-main {
+  padding: $space-4;
+  display: grid;
+  gap: $space-3;
+}
+
+.page-container {
+  width: min(1200px, 100%);
+}
+
+.page {
+  display: grid;
+  gap: $space-3;
+}
+
+.page-header {
+  display: grid;
+  gap: 4px;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.page-header p {
+  margin: 0;
+  color: $color-muted;
+}
+
+.layout-grid {
+  display: grid;
+  gap: $space-2;
+}
+
+.layout-grid.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: $space-2;
+}
+
+.metric p {
+  margin: 0;
+  color: $color-muted;
+}
+
+.metric strong {
+  display: block;
+  margin-top: $space-1;
+  font-size: 30px;
+}
+
+.form {
+  display: grid;
+  gap: $space-2;
+}
+
+.form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: $color-muted;
+}
+
+input,
+textarea,
+select {
+  padding: 10px;
+  border: 1px solid $color-border;
+  border-radius: $radius-sm;
+  width: 100%;
+  font: inherit;
+}
+
+.inline-form {
+  grid-template-columns: 1.4fr 1fr auto;
+  align-items: center;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 1px solid $color-border;
+  font-size: 14px;
+}
+
+thead th {
+  color: $color-muted;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: $space-4;
+}
+
+.login-page .card {
+  width: min(420px, 92vw);
+}
+
+.error-text {
+  color: $color-danger;
+  margin: 0;
+}
+
+.toast {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  padding: 10px 12px;
+  border-radius: $radius-sm;
+  border: 1px solid $color-border;
+  background: #fff;
+  z-index: 10;
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    border-right: none;
+    border-bottom: 1px solid $color-border;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .layout-grid.cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-form {
+    grid-template-columns: 1fr;
+  }
+}

@@ -7,6 +7,7 @@ type LicenseStatus = "active" | "expired" | "revoked";
 
 type LicenseRecord = {
   id: string;
+  licenseKey?: string;
   email: string;
   productCode: string;
   expiresAt: Date;
@@ -21,10 +22,7 @@ type LicenseRecord = {
 
 type FindUniqueArgs = {
   where: {
-    email_productCode: {
-      email: string;
-      productCode: string;
-    };
+    licenseKey: string;
   };
 };
 
@@ -158,8 +156,7 @@ describe("licenseRoutes /verify", () => {
       method: "POST",
       url: "/license/verify",
       payload: {
-        email: "hello@example.com",
-        productCode: "prod",
+        licenseKey: "lic-hello-0000-0000-0000",
         ipAddr: "finger1",
       },
     });
@@ -167,10 +164,41 @@ describe("licenseRoutes /verify", () => {
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ valid: false, reason: "not_found" });
     expect(mock.lastWhere).toEqual({
-      email_productCode: {
-        email: "hello@example.com",
-        productCode: "PROD",
+      licenseKey: "LIC-HELLO-0000-0000-0000",
+    });
+  });
+
+  test("verifies a license by license key", async () => {
+    const keyedLicense: LicenseRecord = {
+      id: "license-keyed",
+      licenseKey: "LIC-ABCD-EFGH-IJKL-MNOP",
+      email: "owner@example.com",
+      productCode: "PROD",
+      expiresAt: addMilliseconds(new Date(), 1_000_000),
+      status: "active",
+      maxDevices: 2,
+      devices: [],
+    };
+
+    const mock = createMockPrisma(keyedLicense);
+    app = await buildApp(mock.stub);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/license/verify",
+      payload: {
+        licenseKey: " lic-abcd-efgh-ijkl-mnop ",
+        ipAddr: "device-1",
       },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      valid: true,
+      remainingDevices: 1,
+    });
+    expect(mock.lastWhere).toEqual({
+      licenseKey: "LIC-ABCD-EFGH-IJKL-MNOP",
     });
   });
 
@@ -191,8 +219,7 @@ describe("licenseRoutes /verify", () => {
       method: "POST",
       url: "/license/verify",
       payload: {
-        email: "owner@example.com",
-        productCode: "prod",
+        licenseKey: "lic-1234-abcd-0000-0000",
         ipAddr: "finger1",
       },
     });
@@ -207,6 +234,7 @@ describe("licenseRoutes /verify", () => {
   test("falls back to x-forwarded-for header", async () => {
     const license: LicenseRecord = {
       id: "license-5",
+      licenseKey: "LIC-AAAA-BBBB-CCCC-DDDD",
       email: "owner@example.com",
       productCode: "PROD",
       expiresAt: addMilliseconds(new Date(), 1_000_000),
@@ -222,8 +250,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       headers: { "x-forwarded-for": " 203.0.113.5, 10.0.0.1 " },
       payload: {
-        email: "owner@example.com",
-        productCode: "prod",
+        licenseKey: license.licenseKey,
       },
     });
 
@@ -236,6 +263,7 @@ describe("licenseRoutes /verify", () => {
   test("accepts existing devices without extra creation", async () => {
     const license: LicenseRecord = {
       id: "license-2",
+      licenseKey: "LIC-ZZZZ-1111-2222-3333",
       email: "owner@example.com",
       productCode: "PROD",
       expiresAt: addMilliseconds(new Date(), 1_000_000),
@@ -250,8 +278,7 @@ describe("licenseRoutes /verify", () => {
       method: "POST",
       url: "/license/verify",
       payload: {
-        email: "owner@example.com",
-        productCode: "prod",
+        licenseKey: license.licenseKey,
         ipAddr: "KNOWN",
       },
     });
@@ -267,6 +294,7 @@ describe("licenseRoutes /verify", () => {
   test("creates new device entries when under the limit", async () => {
     const license: LicenseRecord = {
       id: "license-3",
+      licenseKey: "LIC-QQQQ-WWWW-EEEE-RRRR",
       email: "owner@example.com",
       productCode: "PROD",
       expiresAt: addMilliseconds(new Date(), 1_000_000),
@@ -282,8 +310,7 @@ describe("licenseRoutes /verify", () => {
       method: "POST",
       url: "/license/verify",
       payload: {
-        email: "owner@example.com",
-        productCode: "prod",
+        licenseKey: license.licenseKey,
         ipAddr: "  new-device  ",
       },
     });
@@ -301,6 +328,7 @@ describe("licenseRoutes /verify", () => {
   test("blocks new devices once the limit is reached", async () => {
     const license: LicenseRecord = {
       id: "license-4",
+      licenseKey: "LIC-TTTT-YYYY-UUUU-IIII",
       email: "owner@example.com",
       productCode: "PROD",
       expiresAt: addMilliseconds(new Date(), 1_000_000),
@@ -316,8 +344,7 @@ describe("licenseRoutes /verify", () => {
       method: "POST",
       url: "/license/verify",
       payload: {
-        email: "owner@example.com",
-        productCode: "prod",
+        licenseKey: license.licenseKey,
         ipAddr: "brand-new",
       },
     });

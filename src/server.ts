@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import { adminRoutes } from "./routes/admin";
+import { adminUiRoutes } from "./routes/admin-ui";
 import { healthRoutes } from "./routes/health";
 import { initDb } from "./db";
 import { licenseRoutes } from "./routes/license";
@@ -44,6 +45,7 @@ async function start() {
   });
 
   app.register(healthRoutes);
+  app.register(adminUiRoutes);
   app.register(adminRoutes, { prefix: "/admin" });
   app.register(licenseRoutes, { prefix: "/license" });
 
