@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: license-server-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: license_server
+      POSTGRES_USER: license
+      POSTGRES_PASSWORD: license
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  license-server:
+    image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server:main
+    container_name: license-server
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "80:80"
+    environment:
+      NODE_ENV: production
+      PORT: 80
+      DATABASE_URL: postgresql://license:license@postgres:5432/license_server?schema=public
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
+
+  admin-web:
+    image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server-admin-web:main
+    container_name: license-admin-web
+    restart: unless-stopped
+    depends_on:
+      - license-server
+    ports:
+      - "5174:80"
+
+volumes:
+  postgres_data:

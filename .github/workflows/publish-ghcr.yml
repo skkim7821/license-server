@@ -49,6 +49,25 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Extract admin-web Docker metadata
+        id: meta_admin
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-admin-web
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+
+      - name: Build and push admin-web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/admin-web/Dockerfile
+          push: true
+          tags: ${{ steps.meta_admin.outputs.tags }}
+          labels: ${{ steps.meta_admin.outputs.labels }}
+
   deploy:
     needs: publish
     if: github.ref == 'refs/heads/main'
@@ -71,10 +90,36 @@ jobs:
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH != '' && vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
           GHCR_USERNAME: ${{ vars.GHCR_USERNAME != '' && vars.GHCR_USERNAME || secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ADMIN_TOKEN: ${{ vars.ADMIN_TOKEN != '' && vars.ADMIN_TOKEN || secrets.ADMIN_TOKEN }}
+          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL != '' && vars.ADMIN_EMAIL || secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ vars.ADMIN_PASSWORD != '' && vars.ADMIN_PASSWORD || secrets.ADMIN_PASSWORD }}
+          ADMIN_JWT_SECRET: ${{ vars.ADMIN_JWT_SECRET != '' && vars.ADMIN_JWT_SECRET || secrets.ADMIN_JWT_SECRET }}
         run: |
+          DEPLOY_PATH_B64="$(printf '%s' "${DEPLOY_PATH}" | base64 | tr -d '\n')"
+          GHCR_USERNAME_B64="$(printf '%s' "${GHCR_USERNAME}" | base64 | tr -d '\n')"
+          GHCR_TOKEN_B64="$(printf '%s' "${GHCR_TOKEN}" | base64 | tr -d '\n')"
+          ADMIN_TOKEN_B64="$(printf '%s' "${ADMIN_TOKEN}" | base64 | tr -d '\n')"
+          ADMIN_EMAIL_B64="$(printf '%s' "${ADMIN_EMAIL}" | base64 | tr -d '\n')"
+          ADMIN_PASSWORD_B64="$(printf '%s' "${ADMIN_PASSWORD}" | base64 | tr -d '\n')"
+          ADMIN_JWT_SECRET_B64="$(printf '%s' "${ADMIN_JWT_SECRET}" | base64 | tr -d '\n')"
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy'"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -P "${SSH_PORT}" \
+            deploy/docker-compose.prod.yml "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/deploy/docker-compose.prod.yml"
+
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
-            "export DEPLOY_PATH='${DEPLOY_PATH}' GHCR_USERNAME='${GHCR_USERNAME}' GHCR_TOKEN='${GHCR_TOKEN}'; bash -se" << 'EOF'
+            "export DEPLOY_PATH_B64='${DEPLOY_PATH_B64}' GHCR_USERNAME_B64='${GHCR_USERNAME_B64}' GHCR_TOKEN_B64='${GHCR_TOKEN_B64}' ADMIN_TOKEN_B64='${ADMIN_TOKEN_B64}' ADMIN_EMAIL_B64='${ADMIN_EMAIL_B64}' ADMIN_PASSWORD_B64='${ADMIN_PASSWORD_B64}' ADMIN_JWT_SECRET_B64='${ADMIN_JWT_SECRET_B64}'; bash -se" << 'EOF'
           set -euo pipefail
+
+          DEPLOY_PATH="$(printf '%s' "${DEPLOY_PATH_B64}" | base64 -d)"
+          GHCR_USERNAME="$(printf '%s' "${GHCR_USERNAME_B64}" | base64 -d)"
+          GHCR_TOKEN="$(printf '%s' "${GHCR_TOKEN_B64}" | base64 -d)"
+          ADMIN_TOKEN="$(printf '%s' "${ADMIN_TOKEN_B64}" | base64 -d)"
+          ADMIN_EMAIL="$(printf '%s' "${ADMIN_EMAIL_B64}" | base64 -d)"
+          ADMIN_PASSWORD="$(printf '%s' "${ADMIN_PASSWORD_B64}" | base64 -d)"
+          ADMIN_JWT_SECRET="$(printf '%s' "${ADMIN_JWT_SECRET_B64}" | base64 -d)"
+          GHCR_NAMESPACE="${GHCR_USERNAME}"
 
           case "${DEPLOY_PATH}" in
             "~")
@@ -92,22 +137,16 @@ jobs:
 
           cd "${DEPLOY_PATH}"
 
-          if [ -d .git ]; then
-            git pull --ff-only
-          else
-            echo "DEPLOY_PATH is not a git repo, skipping git pull: ${DEPLOY_PATH}"
-          fi
-
-          if [ ! -f docker-compose.yml ]; then
-            echo "docker-compose.yml not found in DEPLOY_PATH: ${DEPLOY_PATH}"
+          if [ ! -f deploy/docker-compose.prod.yml ]; then
+            echo "deploy/docker-compose.prod.yml not found in DEPLOY_PATH: ${DEPLOY_PATH}"
             exit 1
           fi
 
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
-          docker compose pull || true
-          docker compose up -d --build
+          docker compose -f deploy/docker-compose.prod.yml pull
+          docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
 
-          docker compose ps
+          docker compose -f deploy/docker-compose.prod.yml ps
           curl -fsS http://127.0.0.1/health >/dev/null
           EOF
