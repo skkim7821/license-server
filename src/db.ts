@@ -2,7 +2,7 @@ import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const databaseUrl =
-  process.env["DATABASE_URL"] ?? "postgresql://license:license@localhost:5432/license_server?schema=public";
+  process.env["DATABASE_URL"] ?? "postgresql://license:license@localhost:5532/license_server?schema=public";
 
 const adapter = new PrismaPg({ connectionString: databaseUrl });
 const prisma: any = new PrismaClient({ adapter });

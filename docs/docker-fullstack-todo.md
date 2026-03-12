@@ -10,25 +10,26 @@
 - [ ] 재기동 후 DB 데이터 유지 확인
 
 ## 1) Docker 이미지 전략 확정
-- [ ] Backend Dockerfile 유지(현재 방식 점검)
+- [x] Backend Dockerfile 유지(현재 방식 점검)
 - [ ] Frontend 배포 방식 선택
-  - [ ] A안: Frontend 정적 빌드 + Nginx 컨테이너
+  - [x] A안: Frontend 정적 빌드 + Nginx 컨테이너
   - [ ] B안: Backend가 Frontend static 파일 서빙
-- [ ] 최종안 선택 후 문서에 고정
+- [x] 최종안 선택 후 문서에 고정
 
 ## 2) Frontend 컨테이너화
-- [ ] `apps/admin-web/Dockerfile` 생성 (multi-stage build)
-- [ ] build stage에서 `pnpm --filter admin-web build` 수행
-- [ ] runtime stage에서 정적 파일 서빙 설정(Nginx 또는 node static)
-- [ ] 환경별 API endpoint 주입 방식 정의
-  - [ ] build-time (`VITE_API_BASE_URL`)
-  - [ ] runtime (entrypoint 치환) 중 하나 선택
+- [x] `apps/admin-web/Dockerfile` 생성 (multi-stage build)
+- [x] build stage에서 `pnpm --filter admin-web build` 수행
+- [x] runtime stage에서 정적 파일 서빙 설정(Nginx 또는 node static)
+- [x] 환경별 API endpoint 주입 방식 정의
+  - [x] build-time (`VITE_API_BASE_URL`)
+  - [x] runtime (entrypoint 치환) 중 하나 선택
+  - [x] 선택: Nginx reverse proxy 기반 상대경로(`/admin`, `/license`) 유지
 
 ## 3) docker-compose 확장
-- [ ] `frontend` 서비스 추가
-- [ ] `depends_on`: `license-server` 연결
-- [ ] 외부 노출 포트 확정 (예: `5174:80` 또는 `8080:80`)
-- [ ] 네트워크 이름/서비스 DNS 기준으로 API URL 설정
+- [x] `frontend` 서비스 추가
+- [x] `depends_on`: `license-server` 연결
+- [x] 외부 노출 포트 확정 (예: `5174:80` 또는 `8080:80`)
+- [x] 네트워크 이름/서비스 DNS 기준으로 API URL 설정
 - [ ] healthcheck 추가 (`frontend`, `license-server`, `postgres`)
 
 ## 4) Backend-Frontend 연동
@@ -40,6 +41,7 @@
 ## 5) 환경 변수/시크릿 정리
 - [ ] `.env`에 frontend 관련 변수 추가
 - [ ] 운영용 `.env` 템플릿 분리(`.env.prod` 예시 문서화)
+- [x] Docker 내부 DB 연결 문자열은 compose에서 고정(`postgres:5432`) 처리
 - [ ] `ADMIN_TOKEN` fallback 제거 일정 반영(2026-05-01)
 - [ ] `ADMIN_JWT_SECRET` 필수값 점검
 

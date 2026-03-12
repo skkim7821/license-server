@@ -19,7 +19,13 @@
     "seed:prod": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts --seed-only --seed-mode=prod",
     "check:all": "pnpm prisma validate && pnpm build && pnpm test",
     "frontend:dev": "pnpm --filter admin-web dev",
-    "frontend:build": "pnpm --filter admin-web build"
+    "frontend:build": "pnpm --filter admin-web build",
+    "docker:up": "docker compose -f docker-compose.dev.yml up -d --build",
+    "docker:down": "docker compose -f docker-compose.dev.yml down",
+    "docker:ps": "docker compose -f docker-compose.dev.yml ps",
+    "docker:logs": "docker compose -f docker-compose.dev.yml logs -f --tail=200",
+    "docker:up:prod": "docker compose up -d --build",
+    "docker:down:prod": "docker compose down"
   },
   "keywords": [],
   "author": "",

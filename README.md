@@ -9,7 +9,7 @@
 - **라이선스 API**: `/license/verify` 검증 API와 `/license/user-info` 사용자 구매 목록 조회 API를 제공합니다.
 
 ## 환경 변수
-- `DATABASE_URL`: PostgreSQL 연결 문자열 (예: `postgresql://license:license@localhost:5432/license_server?schema=public`)
+- `DATABASE_URL`: PostgreSQL 연결 문자열 (예: `postgresql://license:license@localhost:5532/license_server?schema=public`)
 - `ADMIN_TOKEN`: 레거시 관리자 API 토큰(전환기간 fallback, 2026-04-30 종료 예정)
 - `ADMIN_EMAIL`: 관리자 로그인 이메일 (`POST /admin/login`)
 - `ADMIN_PASSWORD`: 관리자 로그인 비밀번호
@@ -46,7 +46,6 @@
   - 예: `ADMIN_EMAIL=admin@example.com`
   - 예: `ADMIN_PASSWORD=your-strong-password`
   - 예: `ADMIN_JWT_SECRET=your-strong-jwt-secret`
-  - 예: `DATABASE_URL=postgresql://license:license@postgres:5432/license_server?schema=public`
 3. 컨테이너 실행:
    - `docker compose up -d --build`
 4. 로그 확인:
@@ -56,6 +55,25 @@
    - `http://서버IP/docs`
 
 `docker-compose.yml`은 `postgres_data` 볼륨을 사용하므로 컨테이너 재시작 후에도 PostgreSQL 데이터가 유지됩니다.
+
+## Docker Fullstack 실행 (내부 테스트)
+프론트/백엔드/DB를 한 번에 실행하려면:
+
+```bash
+pnpm docker:up
+```
+
+접속:
+- Frontend(Admin Web): `http://localhost:5174`
+- Backend Health: `http://localhost/health`
+- Backend Docs: `http://localhost/docs`
+- PostgreSQL(로컬 전용): `127.0.0.1:5532`
+
+참고:
+- 내부 테스트는 `docker-compose.dev.yml`을 사용합니다.
+- 운영 배포는 `docker-compose.yml`을 사용합니다.
+- Frontend는 Nginx reverse proxy로 `/admin`, `/license`, `/docs`, `/health`를 backend(`license-server`)로 전달합니다.
+- 따라서 Frontend 코드의 상대경로 API 호출(`/admin/...`)을 그대로 사용합니다.
 
 ## 서버 운영 라이프사이클 커맨드
 아래 명령은 현재 구성(포트 80, PostgreSQL 컨테이너, Docker Compose) 기준입니다.
@@ -68,7 +86,6 @@ ADMIN_TOKEN=change_me_to_strong_token
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=change_me_password
 ADMIN_JWT_SECRET=change_me_jwt_secret
-DATABASE_URL=postgresql://license:license@postgres:5432/license_server?schema=public
 EOF
 ```
 

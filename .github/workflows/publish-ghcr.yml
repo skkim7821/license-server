@@ -48,3 +48,39 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to server
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST != '' && vars.SSH_HOST || secrets.SSH_HOST }}
+          SSH_PORT: ${{ vars.SSH_PORT != '' && vars.SSH_PORT || secrets.SSH_PORT }}
+          SSH_USER: ${{ vars.SSH_USER != '' && vars.SSH_USER || secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH != '' && vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
+          GHCR_USERNAME: ${{ vars.GHCR_USERNAME != '' && vars.GHCR_USERNAME || secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          ssh -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
+            "export DEPLOY_PATH='${DEPLOY_PATH}' GHCR_USERNAME='${GHCR_USERNAME}' GHCR_TOKEN='${GHCR_TOKEN}'; bash -se" << 'EOF'
+          set -euo pipefail
+
+          cd "${DEPLOY_PATH}"
+          git pull --ff-only
+
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+
+          docker compose pull || true
+          docker compose up -d --build
+
+          docker compose ps
+          curl -fsS http://127.0.0.1/health >/dev/null
+          EOF
