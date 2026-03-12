@@ -98,6 +98,9 @@ jobs:
           ADMIN_PASSWORD: ${{ vars.ADMIN_PASSWORD != '' && vars.ADMIN_PASSWORD || secrets.ADMIN_PASSWORD }}
           ADMIN_JWT_SECRET: ${{ vars.ADMIN_JWT_SECRET != '' && vars.ADMIN_JWT_SECRET || secrets.ADMIN_JWT_SECRET }}
         run: |
+          set -euxo pipefail
+          SSH_COMMON_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+
           DEPLOY_PATH_B64="$(printf '%s' "${DEPLOY_PATH}" | base64 | tr -d '\n')"
           GHCR_USERNAME_B64="$(printf '%s' "${GHCR_USERNAME}" | base64 | tr -d '\n')"
           GHCR_TOKEN_B64="$(printf '%s' "${GHCR_TOKEN}" | base64 | tr -d '\n')"
@@ -117,12 +120,18 @@ jobs:
             exit 1
           fi
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy'"
+          echo "[deploy] checking remote ssh connectivity"
+          ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "echo connected: \$(whoami)@\$(hostname)"
 
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -P "${SSH_PORT}" \
+          echo "[deploy] ensure deploy directory"
+          ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy'"
+
+          echo "[deploy] upload compose file"
+          scp ${SSH_COMMON_OPTS} -P "${SSH_PORT}" \
             "${COMPOSE_SRC}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/deploy/docker-compose.prod.yml"
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
+          echo "[deploy] run remote deploy script"
+          timeout 900 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
             "export DEPLOY_PATH_B64='${DEPLOY_PATH_B64}' GHCR_USERNAME_B64='${GHCR_USERNAME_B64}' GHCR_TOKEN_B64='${GHCR_TOKEN_B64}' ADMIN_TOKEN_B64='${ADMIN_TOKEN_B64}' ADMIN_EMAIL_B64='${ADMIN_EMAIL_B64}' ADMIN_PASSWORD_B64='${ADMIN_PASSWORD_B64}' ADMIN_JWT_SECRET_B64='${ADMIN_JWT_SECRET_B64}'; bash -se" << 'EOF'
           set -euo pipefail
 
@@ -162,11 +171,11 @@ jobs:
           # Remove legacy standalone app containers to avoid name conflicts.
           docker rm -f license-server license-admin-web >/dev/null 2>&1 || true
 
-          docker compose -f deploy/docker-compose.prod.yml pull
-          docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
+          timeout 300 docker compose -f deploy/docker-compose.prod.yml pull
+          timeout 300 docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
           seeded=0
           for i in $(seq 1 15); do
-            if docker compose -f deploy/docker-compose.prod.yml exec -T license-server pnpm run seed:prod; then
+            if timeout 45 docker compose -f deploy/docker-compose.prod.yml exec -T license-server pnpm run seed:prod; then
               seeded=1
               break
             fi
@@ -182,7 +191,7 @@ jobs:
           docker compose -f deploy/docker-compose.prod.yml ps
           ok=0
           for i in $(seq 1 30); do
-            if docker compose -f deploy/docker-compose.prod.yml exec -T license-server \
+            if timeout 20 docker compose -f deploy/docker-compose.prod.yml exec -T license-server \
               node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r=>{if(!r.ok) process.exit(1)}).catch(()=>process.exit(1))"; then
               ok=1
               break
