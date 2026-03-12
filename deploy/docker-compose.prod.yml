@@ -24,7 +24,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      PORT: 80
+      PORT: 3000
       DATABASE_URL: postgresql://license:license@postgres:5432/license_server?schema=public
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
