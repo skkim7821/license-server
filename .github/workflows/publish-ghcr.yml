@@ -158,6 +158,9 @@ jobs:
 
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
+          # Remove legacy standalone app containers to avoid name conflicts.
+          docker rm -f license-server license-admin-web >/dev/null 2>&1 || true
+
           docker compose -f deploy/docker-compose.prod.yml pull
           docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
 
