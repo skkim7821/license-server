@@ -16,8 +16,6 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
-    ports:
-      - "80:80"
     environment:
       NODE_ENV: production
       PORT: 80
@@ -34,7 +32,7 @@ services:
     depends_on:
       - license-server
     ports:
-      - "5174:80"
+      - "80:80"
 
 volumes:
   postgres_data:
