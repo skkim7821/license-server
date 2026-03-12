@@ -134,6 +134,7 @@ jobs:
           ADMIN_PASSWORD="$(printf '%s' "${ADMIN_PASSWORD_B64}" | base64 -d)"
           ADMIN_JWT_SECRET="$(printf '%s' "${ADMIN_JWT_SECRET_B64}" | base64 -d)"
           GHCR_NAMESPACE="${GHCR_USERNAME}"
+          export ADMIN_TOKEN ADMIN_EMAIL ADMIN_PASSWORD ADMIN_JWT_SECRET GHCR_NAMESPACE
 
           case "${DEPLOY_PATH}" in
             "~")
@@ -165,5 +166,8 @@ jobs:
           docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
 
           docker compose -f deploy/docker-compose.prod.yml ps
-          curl -fsS http://127.0.0.1/health >/dev/null
+          if ! curl -fsS http://127.0.0.1/health >/dev/null; then
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 license-server
+            exit 1
+          fi
           EOF
