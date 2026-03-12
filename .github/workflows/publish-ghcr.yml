@@ -103,10 +103,21 @@ jobs:
           ADMIN_PASSWORD_B64="$(printf '%s' "${ADMIN_PASSWORD}" | base64 | tr -d '\n')"
           ADMIN_JWT_SECRET_B64="$(printf '%s' "${ADMIN_JWT_SECRET}" | base64 | tr -d '\n')"
 
+          COMPOSE_SRC="deploy/docker-compose.prod.yml"
+          if [ ! -f "${COMPOSE_SRC}" ] && [ -f "docker-compose.prod.yml" ]; then
+            COMPOSE_SRC="docker-compose.prod.yml"
+          fi
+          if [ ! -f "${COMPOSE_SRC}" ]; then
+            echo "compose file not found in repository root."
+            ls -la
+            ls -la deploy || true
+            exit 1
+          fi
+
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy'"
 
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -P "${SSH_PORT}" \
-            deploy/docker-compose.prod.yml "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/deploy/docker-compose.prod.yml"
+            "${COMPOSE_SRC}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/deploy/docker-compose.prod.yml"
 
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
             "export DEPLOY_PATH_B64='${DEPLOY_PATH_B64}' GHCR_USERNAME_B64='${GHCR_USERNAME_B64}' GHCR_TOKEN_B64='${GHCR_TOKEN_B64}' ADMIN_TOKEN_B64='${ADMIN_TOKEN_B64}' ADMIN_EMAIL_B64='${ADMIN_EMAIL_B64}' ADMIN_PASSWORD_B64='${ADMIN_PASSWORD_B64}' ADMIN_JWT_SECRET_B64='${ADMIN_JWT_SECRET_B64}'; bash -se" << 'EOF'
