@@ -55,10 +55,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Prepare SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
 
       - name: Deploy to server
         env:
@@ -69,7 +72,7 @@ jobs:
           GHCR_USERNAME: ${{ vars.GHCR_USERNAME != '' && vars.GHCR_USERNAME || secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
-          ssh -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
             "export DEPLOY_PATH='${DEPLOY_PATH}' GHCR_USERNAME='${GHCR_USERNAME}' GHCR_TOKEN='${GHCR_TOKEN}'; bash -se" << 'EOF'
           set -euo pipefail
 
