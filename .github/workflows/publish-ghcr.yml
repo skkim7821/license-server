@@ -164,6 +164,20 @@ jobs:
 
           docker compose -f deploy/docker-compose.prod.yml pull
           docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
+          seeded=0
+          for i in $(seq 1 15); do
+            if docker compose -f deploy/docker-compose.prod.yml exec -T license-server pnpm run seed:prod; then
+              seeded=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "${seeded}" -ne 1 ]; then
+            echo "admin seed failed after retries"
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 license-server
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 postgres
+            exit 1
+          fi
 
           docker compose -f deploy/docker-compose.prod.yml ps
           ok=0
