@@ -6,11 +6,12 @@ import { PrismaClient } from "../../generated/prisma/client";
 import { generateLicenseKey } from "../utils/license-key";
 import { hashPassword } from "../utils/password";
 
-const databaseUrl = process.env["DATABASE_URL"];
+const databaseUrlRaw = process.env["DATABASE_URL"];
 
-if (!databaseUrl) {
+if (!databaseUrlRaw) {
   throw new Error("DATABASE_URL must be set");
 }
+const databaseUrl = databaseUrlRaw;
 
 const argv = process.argv.slice(2);
 const shouldReset = argv.includes("--reset") || argv.includes("-r");
@@ -18,6 +19,28 @@ const skipSeed = argv.includes("--no-seed");
 const seedOnly = argv.includes("--seed-only");
 const seedModeArg = argv.find((arg) => arg.startsWith("--seed-mode="));
 const seedMode = seedModeArg?.split("=")[1] === "prod" ? "prod" : "dev";
+const CONNECT_TIMEOUT_MS = 15000;
+
+function redactDatabaseUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.password) {
+      parsed.password = "***";
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+async function connectWithTimeout(prisma: any, timeoutMs: number) {
+  await Promise.race([
+    prisma.$connect(),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Database connection timeout after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
 
 async function seedAdmin(prisma: any) {
   const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim() || "admin@example.com";
@@ -129,7 +152,9 @@ async function main() {
   const adapter = new PrismaPg({ connectionString: databaseUrl });
   const prisma: any = new PrismaClient({ adapter });
 
-  await prisma.$connect();
+  console.log("Connecting to database:", redactDatabaseUrl(databaseUrl));
+  await connectWithTimeout(prisma, CONNECT_TIMEOUT_MS);
+  console.log("Database connection established");
   if (!skipSeed) {
     if (seedMode === "prod") {
       await seedProd(prisma);
