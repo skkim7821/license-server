@@ -99,7 +99,20 @@ jobs:
           ADMIN_JWT_SECRET: ${{ vars.ADMIN_JWT_SECRET != '' && vars.ADMIN_JWT_SECRET || secrets.ADMIN_JWT_SECRET }}
         run: |
           set -euxo pipefail
-          SSH_COMMON_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          SSH_COMMON_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          retry() {
+            local attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local n=1
+            until "$@"; do
+              if [ "${n}" -ge "${attempts}" ]; then
+                return 1
+              fi
+              n=$((n + 1))
+              sleep "${sleep_seconds}"
+            done
+          }
 
           DEPLOY_PATH_B64="$(printf '%s' "${DEPLOY_PATH}" | base64 | tr -d '\n')"
           GHCR_USERNAME_B64="$(printf '%s' "${GHCR_USERNAME}" | base64 | tr -d '\n')"
@@ -121,13 +134,13 @@ jobs:
           fi
 
           echo "[deploy] checking remote ssh connectivity"
-          ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "echo connected: \$(whoami)@\$(hostname)"
+          retry 5 5 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "echo connected: \$(whoami)@\$(hostname)"
 
           echo "[deploy] ensure deploy directory"
-          ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy'"
+          retry 5 5 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy'"
 
           echo "[deploy] upload compose file"
-          scp ${SSH_COMMON_OPTS} -P "${SSH_PORT}" \
+          retry 5 5 scp ${SSH_COMMON_OPTS} -P "${SSH_PORT}" \
             "${COMPOSE_SRC}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/deploy/docker-compose.prod.yml"
 
           echo "[deploy] run remote deploy script"
