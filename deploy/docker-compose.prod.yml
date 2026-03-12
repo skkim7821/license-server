@@ -9,13 +9,19 @@ services:
       POSTGRES_PASSWORD: license
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U license -d license_server"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   license-server:
     image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server:main
     container_name: license-server
     restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 80
@@ -24,15 +30,27 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
 
   admin-web:
     image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server-admin-web:main
     container_name: license-admin-web
     restart: unless-stopped
     depends_on:
-      - license-server
+      license-server:
+        condition: service_healthy
     ports:
       - "80:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
 volumes:
   postgres_data:

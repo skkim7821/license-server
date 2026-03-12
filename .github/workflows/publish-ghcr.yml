@@ -168,7 +168,8 @@ jobs:
           docker compose -f deploy/docker-compose.prod.yml ps
           ok=0
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1/health >/dev/null; then
+            if docker compose -f deploy/docker-compose.prod.yml exec -T license-server \
+              node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r=>{if(!r.ok) process.exit(1)}).catch(()=>process.exit(1))"; then
               ok=1
               break
             fi
@@ -176,6 +177,8 @@ jobs:
           done
           if [ "${ok}" -ne 1 ]; then
             docker compose -f deploy/docker-compose.prod.yml logs --tail=200 license-server
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 postgres
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=100 admin-web
             exit 1
           fi
           EOF
