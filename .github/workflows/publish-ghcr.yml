@@ -90,13 +90,18 @@ jobs:
             exit 1
           fi
 
-          if [ ! -d "${DEPLOY_PATH}/.git" ]; then
-            echo "DEPLOY_PATH is not a git repo: ${DEPLOY_PATH}"
-            exit 1
+          cd "${DEPLOY_PATH}"
+
+          if [ -d .git ]; then
+            git pull --ff-only
+          else
+            echo "DEPLOY_PATH is not a git repo, skipping git pull: ${DEPLOY_PATH}"
           fi
 
-          cd "${DEPLOY_PATH}"
-          git pull --ff-only
+          if [ ! -f docker-compose.yml ]; then
+            echo "docker-compose.yml not found in DEPLOY_PATH: ${DEPLOY_PATH}"
+            exit 1
+          fi
 
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
