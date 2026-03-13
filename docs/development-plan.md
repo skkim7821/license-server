@@ -13,7 +13,7 @@
 ## 진행 현황 (2026-03-12)
 - Phase 2 완료: PostgreSQL 전환, baseline migration 정리, docker-compose postgres 반영
 - Phase 3 완료: `/license/verify`를 `licenseKey` 전용으로 전환, 레거시 `email+productCode` 검증 경로 제거
-- Phase 4 진행: `AdminUser` + JWT 로그인 구현, `ADMIN_TOKEN`은 전환기간 fallback으로 유지, `operator/super_admin` 권한 분기 적용
+- Phase 4 진행: `AdminUser` + JWT 로그인 구현 완료, `operator/super_admin` 권한 분기 적용
 - Phase 5 진행: `seed:dev`/`seed:prod` 분리 및 bootstrap seed mode 도입
 - Phase 7 진행: `apps/admin-web`(React + SCSS + Vite) 스캐폴드/로그인/사용자/라이선스 화면 및 API 연동 구현, 빌드 검증 완료
 
@@ -38,7 +38,7 @@
 
 ### 1.3 관리자 기능
 현재 `src/routes/admin.ts`:
-- 인증: `/admin/login`(환경변수 기반) + Bearer 토큰 `ADMIN_TOKEN`
+- 인증: `/admin/login`(AdminUser 기반) + Bearer JWT
 - 제공 API:
   - `POST /admin/login`
   - `POST /admin/products`
@@ -63,7 +63,7 @@
 - Prisma schema와 migration SQL의 컬럼 불일치(`ipAddr` vs `fingerprint`)
 - migration 체계보다 `prisma db push` 중심 운영 경로(Dockerfile/bootstrap)
 - DB 계층의 SQLite 어댑터 강결합(`@prisma/adapter-better-sqlite3`)
-- 관리자 인증이 정적 `ADMIN_TOKEN`에 고정되어 로그인/권한 모델과 충돌
+- 관리자 인증 정책이 JWT 중심으로 정리되어야 함
 - 라이선스 검증/발급 API가 email+productCode 계약에 고정
 - docker-compose 운영 구성이 SQLite 파일 볼륨 전제
 
@@ -124,7 +124,7 @@
   - `license/verify` email 계약의 폐기 일정 확정
   - 필요 시 `legacy` 경로 유지 기간 명시
 - 인증 전환 전략 확정
-  - `ADMIN_TOKEN` 제거 시점과 관리자 로그인 도입 시점 명시
+  - 관리자 JWT 로그인 정책과 운영 절차 명시
 
 완료 기준(DoD):
 - 충돌 지점별 해결 방식(코드/운영/릴리즈 영향) 문서화 완료
@@ -207,7 +207,7 @@
   - 라이선스 상태 변경/연장/삭제 액션
 
 완료 기준(DoD):
-- 정적 `ADMIN_TOKEN` 없이 관리자 로그인 가능
+- 관리자 JWT 로그인 가능
 - 관리자 권한 없는 요청 차단
 - 운영 필수 CRUD가 UI 또는 API에서 모두 수행 가능
 
@@ -334,6 +334,6 @@
 ## 6. 즉시 착수 TODO (다음 작업 단위)
 - [x] schema vs migration 불일치 항목 확정 및 기준안 선택(`ipAddr` 또는 `fingerprint`)
 - [x] `db push` 사용 지점을 `migrate` 체계로 치환하는 변경안 작성
-- [x] `ADMIN_TOKEN` 제거/병행 기간 정책 확정
+- [x] 관리자 인증 JWT 단일 정책 확정
 - [x] `license/verify` legacy 병행 여부 및 종료 시점 확정
 - [x] Phase 0 완료 기준 승인 후 Phase 2 착수

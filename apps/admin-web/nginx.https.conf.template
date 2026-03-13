@@ -1,6 +1,6 @@
 server {
   listen 80;
-  server_name lc.skkim.dev;
+  server_name ${SERVER_NAME};
 
   location /.well-known/acme-challenge/ {
     root /var/www/certbot;
@@ -13,10 +13,10 @@ server {
 
 server {
   listen 443 ssl;
-  server_name lc.skkim.dev;
+  server_name ${SERVER_NAME};
 
-  ssl_certificate /etc/letsencrypt/live/lc.skkim.dev/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/lc.skkim.dev/privkey.pem;
+  ssl_certificate ${SSL_CERT_PATH};
+  ssl_certificate_key ${SSL_KEY_PATH};
 
   root /usr/share/nginx/html;
   index index.html;

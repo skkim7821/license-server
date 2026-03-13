@@ -6,7 +6,7 @@
 - [x] schema와 migration SQL 불일치 해소 기준 확정(`ipAddr`/`fingerprint`)
 - [x] SQLite migration 이력 정리 및 Postgres baseline 전략 확정
 - [x] `db push` -> `migrate` 전환 계획 확정(Dockerfile/bootstrap 포함)
-- [x] `ADMIN_TOKEN` 제거/병행 시나리오 확정
+- [x] 관리자 인증 JWT 단일 정책 확정
 - [x] `license/verify` legacy 병행 여부와 종료 시점 확정
 - [x] Phase 0 완료 승인(Phase 1+ 착수 게이트)
 

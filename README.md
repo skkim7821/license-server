@@ -3,14 +3,13 @@
 간단한 배포 환경에서 동작하는 라이선스 발급/검증 API 서버입니다. Fastify 기반으로 API 문서(swagger)와 관리자/클라이언트 루트를 모두 제공하며 Prisma + PostgreSQL을 통해 라이선스 데이터 및 장치 상태를 관리합니다.
 
 ## 핵심 구성
-- **Fastify + Swagger**: `/docs`에서 OpenAPI UI를 제공하며 `src/server.ts`에서 swagger/swagger-ui를 등록하고 있습니다.
+- **Fastify + Swagger**: 개발/테스트(`NODE_ENV!=production`)에서만 `/docs` OpenAPI UI를 제공합니다.
 - **Prisma + PostgreSQL**: `DATABASE_URL` 기준 PostgreSQL에 라이선스/제품/장치 정보를 저장합니다.
-- **관리자 전용 엔드포인트**: `/admin/login`으로 로그인 후 Bearer 토큰으로 `/admin/products`, `/admin/licenses`, `/admin/bulk/licenses` 및 라이선스 운영 CRUD를 호출합니다. `ADMIN_JWT_SECRET`이 설정되면 DB 기반 관리자 계정 JWT가 우선 사용되고, `ADMIN_TOKEN`은 2026-04-30까지 fallback으로만 허용됩니다.
+- **관리자 전용 엔드포인트**: `/admin/login`으로 로그인 후 Bearer JWT로 `/admin/products`, `/admin/licenses`, `/admin/bulk/licenses` 및 라이선스 운영 CRUD를 호출합니다.
 - **라이선스 API**: `/license/verify` 검증 API와 `/license/user-info` 사용자 구매 목록 조회 API를 제공합니다.
 
 ## 환경 변수
 - `DATABASE_URL`: PostgreSQL 연결 문자열 (예: `postgresql://license:license@localhost:5532/license_server?schema=public`)
-- `ADMIN_TOKEN`: 레거시 관리자 API 토큰(전환기간 fallback, 2026-04-30 종료 예정)
 - `ADMIN_EMAIL`: 관리자 로그인 이메일 (`POST /admin/login`)
 - `ADMIN_PASSWORD`: 관리자 로그인 비밀번호
 - `ADMIN_JWT_SECRET`: 관리자 JWT 서명 키(설정 시 DB 기반 로그인 활성화)
@@ -25,6 +24,11 @@
 3. DB 초기화: `pnpm run db:bootstrap` (개발 seed), 운영 초기화는 `pnpm run db:bootstrap:prod`
 4. 개발 서버: `pnpm dev ▶ tsx watch src/server.ts`
 5. 배포/빌드: `pnpm build` → `pnpm start`
+
+로컬 통합 실행(비도커, backend+frontend):
+- `pnpm dev:local`
+- 이미 DB가 준비된 경우: `LOCAL_DEV_SKIP_BOOTSTRAP=1 pnpm dev:local`
+- 기본 포트(`3000`, `5174`)가 사용 중이면 자동으로 다음 포트로 fallback
 
 ## 추가 커맨드
 - `pnpm test`: `vitest`를 이용한 단위 테스트 실행 (`src/routes/*.test.ts`)
@@ -42,7 +46,6 @@
 ## 서버 배포 (Docker Compose)
 1. 서버에 코드 배포 후 루트 디렉터리 이동
 2. 환경변수 준비:
-  - 예: `ADMIN_TOKEN=your-strong-token` (fallback)
   - 예: `ADMIN_EMAIL=admin@example.com`
   - 예: `ADMIN_PASSWORD=your-strong-password`
   - 예: `ADMIN_JWT_SECRET=your-strong-jwt-secret`
@@ -52,9 +55,80 @@
    - `docker compose logs -f license-server`
 5. 접속 확인:
    - `http://서버IP/health`
-   - `http://서버IP/docs`
+   - 운영 환경에서는 `/docs` 비활성화
 
 `docker-compose.yml`은 `postgres_data` 볼륨을 사용하므로 컨테이너 재시작 후에도 PostgreSQL 데이터가 유지됩니다.
+
+## 클라우드 이관용 표준 배포 절차
+다른 클라우드/서버로 바로 옮길 때는 `deploy` 기준으로 동일하게 적용합니다.
+
+1. 서버에 프로젝트 배치 후 배포 경로로 이동
+```bash
+cd /home/ubuntu/app
+```
+2. 환경변수 파일 준비
+```bash
+cp deploy/.env.prod.example .env
+# .env 값 수정: ADMIN_*, GHCR_NAMESPACE, SERVER_NAME, ENABLE_HTTPS, SSL_*_PATH
+```
+3. (필요 시) GHCR 로그인
+```bash
+echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+```
+4. 배포 실행
+```bash
+docker compose --env-file .env -f deploy/docker-compose.prod.yml pull
+docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d --remove-orphans
+```
+5. 확인
+```bash
+docker compose --env-file .env -f deploy/docker-compose.prod.yml ps
+curl -fsS http://127.0.0.1/health
+```
+
+메모:
+- `ENABLE_HTTPS=true` 이고 인증서 파일이 있으면 HTTPS(443) 활성화.
+- 인증서가 없으면 admin-web은 HTTP 모드로 자동 fallback.
+
+## GitHub Actions 환경 변수 정리
+`publish-ghcr.yml`의 `deploy` job이 읽는 설정값입니다.  
+설정 위치: GitHub 저장소 `Settings > Secrets and variables > Actions`
+
+### 우선순위 규칙
+- 일부 키는 `vars.<KEY>`가 비어있지 않으면 Variables 값을 사용하고, 비어있으면 `secrets.<KEY>`로 fallback합니다.
+- 민감값(토큰/비밀번호/개인키)은 반드시 `Secrets` 사용을 권장합니다.
+
+### 필수 키 (deploy 실행에 필요)
+| Key | 권장 위치 | 예시 | 설명 |
+|---|---|---|---|
+| `SSH_PRIVATE_KEY` | Secret | `-----BEGIN OPENSSH PRIVATE KEY-----...` | 배포 서버 접속용 개인키. 워크플로우에서 `~/.ssh/deploy_key`로 저장해 SSH/SCP에 사용합니다. |
+| `SSH_HOST` | Variable | `lc.skkim.dev` 또는 `134.185.104.251` | 배포 대상 서버 주소. |
+| `SSH_PORT` | Variable | `22` | SSH 포트. 특별한 이유 없으면 22 권장. |
+| `SSH_USER` | Variable | `ubuntu` | SSH 로그인 사용자. |
+| `DEPLOY_PATH` | Variable | `/home/ubuntu/app` | 서버 내 배포 경로. `deploy/docker-compose.prod.yml`가 이 경로 하위에 업로드됩니다. |
+| `GHCR_USERNAME` | Variable | `skkim7821` | GHCR 네임스페이스/로그인 사용자. 런타임에서 `GHCR_NAMESPACE`로도 사용됩니다. |
+| `GHCR_TOKEN` | Secret | `ghp_...` 또는 `github_pat_...` | 서버에서 `docker login ghcr.io`에 사용하는 토큰(패키지 read 권한 필요). |
+| `ADMIN_EMAIL` | Secret | `admin@example.com` | 운영 관리자 계정 이메일(seed 시 upsert 기준 키). |
+| `ADMIN_PASSWORD` | Secret | `very-strong-password` | 운영 관리자 계정 비밀번호(seed 시 갱신 가능). |
+| `ADMIN_JWT_SECRET` | Secret | `long-random-secret` | 관리자 JWT 서명 키. |
+
+### 권장 키 (기능/보안 강화)
+| Key | 권장 위치 | 기본/예시 | 설명 |
+|---|---|---|---|
+| `SERVER_NAME` | Variable | `lc.skkim.dev` | admin-web Nginx `server_name`에 주입됩니다. |
+| `ENABLE_HTTPS` | Variable | `true` | `true/false`. HTTPS 템플릿 사용 여부. |
+| `SSL_CERT_PATH` | Variable | `/etc/letsencrypt/live/lc.skkim.dev/fullchain.pem` | 인증서 파일 경로(서버 기준). |
+| `SSL_KEY_PATH` | Variable | `/etc/letsencrypt/live/lc.skkim.dev/privkey.pem` | 개인키 파일 경로(서버 기준). |
+
+### 변수 선택 가이드
+- `Variables`에 두기 좋은 값: 호스트, 포트, 경로, 도메인처럼 노출돼도 상대적으로 안전한 운영 설정.
+- `Secrets`에 둬야 하는 값: 개인키, 토큰, 비밀번호, JWT 시크릿 등.
+
+### 빠른 체크리스트
+- `SSH_PRIVATE_KEY`는 반드시 개인키 전체 문자열이어야 합니다.
+- `DEPLOY_PATH`는 서버에서 실제 존재하는 절대경로여야 합니다.
+- `GHCR_TOKEN`은 대상 이미지 pull 권한(`read:packages`)이 있어야 합니다.
+- HTTPS 사용 시 서버에 인증서 파일이 실제로 존재해야 합니다.
 
 ## Docker Fullstack 실행 (내부 테스트)
 프론트/백엔드/DB를 한 번에 실행하려면:
@@ -66,7 +140,7 @@ pnpm docker:up
 접속:
 - Frontend(Admin Web): `http://localhost:5174`
 - Backend Health: `http://localhost/health`
-- Backend Docs: `http://localhost/docs`
+- Backend Docs(개발 전용): `http://localhost/docs`
 - PostgreSQL(로컬 전용): `127.0.0.1:5532`
 
 참고:
@@ -82,7 +156,6 @@ pnpm docker:up
 ```bash
 cd /opt/license-server
 cat > .env <<'EOF'
-ADMIN_TOKEN=change_me_to_strong_token
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=change_me_password
 ADMIN_JWT_SECRET=change_me_jwt_secret
@@ -166,7 +239,7 @@ docker container prune -f
 
 ## API 요약
 ### 관리자 API (`/admin/*`, 보호됨)
-- `POST /admin/login`: DB(`AdminUser`) 기반 로그인 후 JWT 반환, 실패 시 환경변수 정적 토큰 fallback
+- `POST /admin/login`: DB(`AdminUser`) 기반 로그인 후 JWT 반환
 - `POST /admin/products`: 제품 코드/이름/기기 제한/기본 기간을 등록
 - `GET /admin/products`: 등록된 제품 목록을 코드 오름차순으로 조회
 - `POST /admin/users`: 사용자 생성(동일 이메일 존재 시 이름 갱신)
@@ -222,5 +295,5 @@ curl -fsS http://127.0.0.1:3000/admin-ui >/dev/null
 - `generated/prisma/client`: Prisma Client 자동 생성 코드
 
 ## 다음 단계 추천
-1. `ADMIN_TOKEN` fallback 제거 일정(2026-05-01) 기준으로 운영 환경 점검
+1. 관리자 계정 운영 절차(비밀번호 로테이션/비활성화 계정 처리) 문서화
 2. Phase 6 항목(감사 로그/전환 리허설/복구 검증) 완료

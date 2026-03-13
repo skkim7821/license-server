@@ -10,39 +10,42 @@ import { initDb } from "./db";
 import { licenseRoutes } from "./routes/license";
 
 const PORT = Number(process.env.PORT) || 3000;
+const ENABLE_SWAGGER = process.env.NODE_ENV !== "production";
 
 async function start() {
   await initDb();
 
   const app = Fastify({ logger: true });
 
-  await app.register(fastifySwagger, {
-    openapi: {
-      info: {
-        title: "License Server",
-        description: "Administrative and license verification APIs",
-        version: "1.0.0",
-      },
-      servers: [{ url: "/", description: "Default" }],
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: "http",
-            scheme: "bearer",
-            bearerFormat: "JWT",
+  if (ENABLE_SWAGGER) {
+    await app.register(fastifySwagger, {
+      openapi: {
+        info: {
+          title: "License Server",
+          description: "Administrative and license verification APIs",
+          version: "1.0.0",
+        },
+        servers: [{ url: "/", description: "Default" }],
+        components: {
+          securitySchemes: {
+            bearerAuth: {
+              type: "http",
+              scheme: "bearer",
+              bearerFormat: "JWT",
+            },
           },
         },
       },
-    },
-  });
-  await app.register(fastifySwaggerUi, {
-    routePrefix: "/docs",
-    initOAuth: {},
-    uiConfig: {
-      docExpansion: "list",
-      deepLinking: false,
-    },
-  });
+    });
+    await app.register(fastifySwaggerUi, {
+      routePrefix: "/docs",
+      initOAuth: {},
+      uiConfig: {
+        docExpansion: "list",
+        deepLinking: false,
+      },
+    });
+  }
 
   app.register(healthRoutes);
   app.register(adminUiRoutes);

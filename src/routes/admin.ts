@@ -263,7 +263,7 @@ const adminLoginResponseSchema = {
   properties: {
     token: { type: "string" },
     role: { type: "string" },
-    type: { type: "string", enum: ["jwt", "static"] },
+    type: { type: "string", enum: ["jwt"] },
   },
 };
 
@@ -335,7 +335,7 @@ type AdminRole = "super_admin" | "operator";
 type AdminAuthContext = {
   adminId: string;
   role: AdminRole;
-  authType: "jwt" | "static";
+  authType: "jwt";
 };
 
 type LicenseInsertPayload = {
@@ -465,16 +465,6 @@ async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
     return;
   }
 
-  const adminToken = process.env.ADMIN_TOKEN;
-  if (adminToken && bearerToken === adminToken) {
-    setAdminContext(request, {
-      adminId: "static-admin",
-      role: "super_admin",
-      authType: "static",
-    });
-    return;
-  }
-
   return reply.status(401).send({ error: "Unauthorized" });
 }
 
@@ -538,24 +528,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const adminEmail = process.env.ADMIN_EMAIL;
-      const adminPassword = process.env.ADMIN_PASSWORD;
-      const adminToken = process.env.ADMIN_TOKEN;
-
-      if (adminEmail && adminPassword && adminToken) {
-        if (
-          normalizedEmail === adminEmail.toLowerCase().trim() &&
-          password === adminPassword
-        ) {
-          return reply.send({
-            token: adminToken,
-            role: "super_admin",
-            type: "static",
-          });
-        }
-      }
-
-      const hasAnyAuthConfig = Boolean(process.env.ADMIN_JWT_SECRET || adminToken);
+      const hasAnyAuthConfig = Boolean(process.env.ADMIN_JWT_SECRET);
       if (!hasAnyAuthConfig) {
         return reply.status(503).send({ error: "admin_auth_not_configured" });
       }

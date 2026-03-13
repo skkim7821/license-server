@@ -28,7 +28,6 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://license:license@postgres:5432/license_server?schema=public
-      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
@@ -49,6 +48,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      SERVER_NAME: ${SERVER_NAME:-_}
+      ENABLE_HTTPS: ${ENABLE_HTTPS:-true}
+      SSL_CERT_PATH: ${SSL_CERT_PATH:-/etc/letsencrypt/live/lc.skkim.dev/fullchain.pem}
+      SSL_KEY_PATH: ${SSL_KEY_PATH:-/etc/letsencrypt/live/lc.skkim.dev/privkey.pem}
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/lib/letsencrypt:/var/lib/letsencrypt:ro

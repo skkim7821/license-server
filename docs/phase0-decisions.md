@@ -14,14 +14,10 @@
   - reset 경로는 `pnpm prisma migrate reset --force --skip-seed --skip-generate`
   - Docker/운영 문서도 migrate 기반으로 정리
 
-## 3) `ADMIN_TOKEN` 병행 정책
+## 3) 관리자 인증 정책
 - 정책 확정일: 2026-03-12
 - 현재 정책:
-  - 1순위: `AdminUser + JWT` 로그인(`/admin/login`)
-  - 2순위: `ADMIN_TOKEN` fallback (전환 기간만 허용)
-- 종료 계획:
-  - 2026-04-30까지 fallback 유지
-  - 2026-05-01부터 `ADMIN_TOKEN` 비활성화(코드 제거 대상)
+  - `AdminUser + JWT` 로그인(`/admin/login`) 단일 정책
 
 ## 4) `license/verify` legacy 정책
 - 정책 확정일: 2026-03-12

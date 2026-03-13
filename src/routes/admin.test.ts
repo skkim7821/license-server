@@ -3,13 +3,16 @@ import Fastify, { type FastifyInstance, type FastifyPluginAsync } from "fastify"
 import jwt from "jsonwebtoken";
 import { hashPassword } from "../utils/password";
 
-const ADMIN_TOKEN = "test-admin-token";
 const ADMIN_EMAIL = "admin@example.com";
 const ADMIN_PASSWORD = "topsecret";
-process.env.ADMIN_TOKEN = ADMIN_TOKEN;
-process.env.ADMIN_EMAIL = ADMIN_EMAIL;
-process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
-delete process.env.ADMIN_JWT_SECRET;
+const ADMIN_JWT_SECRET = "jwt-secret-for-test";
+
+function issueAdminToken(role: "super_admin" | "operator" = "super_admin", subject = "admin-1"): string {
+  return jwt.sign({ role, type: "admin" }, process.env.ADMIN_JWT_SECRET!, {
+    subject,
+    expiresIn: "1h",
+  });
+}
 
 const productCreate = vi.fn();
 const productFindUnique = vi.fn();
@@ -83,7 +86,7 @@ describe("adminRoutes", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    delete process.env.ADMIN_JWT_SECRET;
+    process.env.ADMIN_JWT_SECRET = ADMIN_JWT_SECRET;
     adminUserFindUnique.mockResolvedValue(null);
     adminUserUpdate.mockResolvedValue(undefined);
     licenseCount.mockResolvedValue(0);
@@ -103,7 +106,7 @@ describe("adminRoutes", () => {
     }
   });
 
-  test("requires the admin token", async () => {
+  test("requires a valid admin jwt", async () => {
     app = await buildApp();
 
     const response = await app.inject({
@@ -117,7 +120,8 @@ describe("adminRoutes", () => {
     expect(productCreate).not.toHaveBeenCalled();
   });
 
-  test("logs in with configured admin credentials", async () => {
+  test("returns 503 when admin auth is not configured", async () => {
+    delete process.env.ADMIN_JWT_SECRET;
     app = await buildApp();
 
     const response = await app.inject({
@@ -129,12 +133,8 @@ describe("adminRoutes", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      token: ADMIN_TOKEN,
-      role: "super_admin",
-      type: "static",
-    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ error: "admin_auth_not_configured" });
   });
 
   test("logs in with admin user and returns jwt token", async () => {
@@ -290,7 +290,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/products",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: {
         code: " prod ",
         name: "  Normalized ",
@@ -325,7 +325,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/users",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: { email: "OWNER@EXAMPLE.COM", name: " Owner " },
     });
 
@@ -367,7 +367,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "GET",
       url: "/admin/users",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
     });
 
     expect(response.statusCode).toBe(200);
@@ -411,7 +411,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "PATCH",
       url: "/admin/users/user-2",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: { email: " AFTER@EXAMPLE.COM ", name: " After " },
     });
 
@@ -445,7 +445,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "DELETE",
       url: "/admin/users/user-delete-1",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
     });
 
     expect(response.statusCode).toBe(200);
@@ -468,7 +468,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "DELETE",
       url: "/admin/users/user-delete-2",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
     });
 
     expect(response.statusCode).toBe(409);
@@ -482,7 +482,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/products",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: {
         code: "PROD",
         name: "",
@@ -518,7 +518,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/licenses",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: {
         email: "Owner@example.com ",
         productCode: " prod ",
@@ -550,7 +550,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/licenses",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: {
         email: "owner@example.com",
         productCode: "missing",
@@ -595,7 +595,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/bulk/licenses",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: {
         product: {
           code: " bulk ",
@@ -663,7 +663,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/bulk/licenses",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: {
         product: {
           code: "reuse",
@@ -702,7 +702,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "GET",
       url: "/admin/products",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
     });
 
     expect(response.statusCode).toBe(200);
@@ -736,7 +736,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "PATCH",
       url: "/admin/products/prod",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: { name: " New Name ", maxDevices: 5, defaultPeriod: 30 },
     });
 
@@ -773,7 +773,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "DELETE",
       url: "/admin/products/prod",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
     });
 
     expect(response.statusCode).toBe(200);
@@ -795,7 +795,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "DELETE",
       url: "/admin/products/PROD",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
     });
 
     expect(response.statusCode).toBe(409);
@@ -830,7 +830,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "GET",
       url: "/admin/licenses",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
     });
 
     expect(response.statusCode).toBe(200);
@@ -871,7 +871,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "PATCH",
       url: "/admin/licenses/license-x/extend",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: { days: 30 },
     });
 
@@ -909,7 +909,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "PATCH",
       url: "/admin/licenses/license-y/status",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
       payload: { status: "revoked" },
     });
 
@@ -945,7 +945,7 @@ describe("adminRoutes", () => {
     const response = await app.inject({
       method: "DELETE",
       url: "/admin/licenses/license-z",
-      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      headers: { authorization: `Bearer ${issueAdminToken()}` },
     });
 
     expect(response.statusCode).toBe(200);

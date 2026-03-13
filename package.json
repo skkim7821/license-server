@@ -20,6 +20,7 @@
     "check:all": "pnpm prisma validate && pnpm build && pnpm test",
     "frontend:dev": "pnpm --filter admin-web dev",
     "frontend:build": "pnpm --filter admin-web build",
+    "dev:local": "bash ./scripts/dev-local.sh",
     "docker:up": "docker compose -f docker-compose.dev.yml up -d --build",
     "docker:down": "docker compose -f docker-compose.dev.yml down",
     "docker:ps": "docker compose -f docker-compose.dev.yml ps",

@@ -15,7 +15,10 @@ RUN pnpm --filter admin-web build
 
 FROM nginx:1.27-alpine AS runtime
 
-COPY apps/admin-web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/admin-web/nginx.http.conf.template /etc/nginx/templates/default.http.conf.template
+COPY apps/admin-web/nginx.https.conf.template /etc/nginx/templates/default.https.conf.template
+COPY apps/admin-web/docker-entrypoint.d/10-select-nginx-template.sh /docker-entrypoint.d/10-select-nginx-template.sh
+RUN chmod +x /docker-entrypoint.d/10-select-nginx-template.sh
 COPY --from=builder /app/apps/admin-web/dist /usr/share/nginx/html
 
 EXPOSE 80

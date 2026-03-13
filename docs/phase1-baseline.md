@@ -27,14 +27,13 @@
 ## 3) 관리자 API 기능/누락 목록
 
 ## 구현 완료
-- 인증: `POST /admin/login` (JWT + fallback 토큰)
+- 인증: `POST /admin/login` (JWT)
 - Users: 생성/조회/수정/삭제
 - Products: 생성/조회/수정/삭제
 - Licenses: 생성/조회/연장/상태변경/삭제
 - Bulk: `POST /admin/bulk/licenses`
 
 ## 남은 과제(운영 안정화 관점)
-- `ADMIN_TOKEN` fallback 제거 시점 도래 후 코드 제거
 - 관리자 액션 감사 로그 저장(Phase 6)
 - `/admin-ui` 레거시 제거 전 parity 최종 확인
 

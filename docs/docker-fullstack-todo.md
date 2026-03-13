@@ -42,7 +42,7 @@
 - [ ] `.env`에 frontend 관련 변수 추가
 - [ ] 운영용 `.env` 템플릿 분리(`.env.prod` 예시 문서화)
 - [x] Docker 내부 DB 연결 문자열은 compose에서 고정(`postgres:5432`) 처리
-- [ ] `ADMIN_TOKEN` fallback 제거 일정 반영(2026-05-01)
+- [x] 관리자 인증 JWT 전용 정책 반영
 - [ ] `ADMIN_JWT_SECRET` 필수값 점검
 
 ## 6) 부트스트랩/마이그레이션 순서 고정
@@ -62,3 +62,12 @@
 - [ ] `README.md`에 fullstack compose 실행 절차 추가
 - [ ] `docs/development-checklist.md`에 Docker fullstack 항목 추가
 - [ ] 운영 인수인계용 커맨드 모음 업데이트
+
+## 9) SSL/TLS 운영 정리 (클라우드 이관 대비)
+- [x] Admin-web Nginx를 템플릿 기반으로 전환 (HTTP/HTTPS 런타임 선택)
+- [x] `ENABLE_HTTPS`, `SERVER_NAME`, `SSL_CERT_PATH`, `SSL_KEY_PATH` 환경변수로 제어
+- [x] 인증서 파일 미존재 시 HTTP 모드로 자동 fallback (컨테이너 기동 실패 방지)
+- [x] 배포 워크플로우에서 SSL 관련 환경변수 전달
+- [ ] 환경별 값 문서화
+  - Oracle/LetsEncrypt 예시: `/etc/letsencrypt/live/<domain>/fullchain.pem`
+  - Cloudflare Origin Cert 예시 경로

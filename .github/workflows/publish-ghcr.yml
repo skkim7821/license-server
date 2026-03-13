@@ -93,10 +93,13 @@ jobs:
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH != '' && vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
           GHCR_USERNAME: ${{ vars.GHCR_USERNAME != '' && vars.GHCR_USERNAME || secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          ADMIN_TOKEN: ${{ vars.ADMIN_TOKEN != '' && vars.ADMIN_TOKEN || secrets.ADMIN_TOKEN }}
           ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL != '' && vars.ADMIN_EMAIL || secrets.ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ vars.ADMIN_PASSWORD != '' && vars.ADMIN_PASSWORD || secrets.ADMIN_PASSWORD }}
           ADMIN_JWT_SECRET: ${{ vars.ADMIN_JWT_SECRET != '' && vars.ADMIN_JWT_SECRET || secrets.ADMIN_JWT_SECRET }}
+          SERVER_NAME: ${{ vars.SERVER_NAME != '' && vars.SERVER_NAME || secrets.SERVER_NAME }}
+          ENABLE_HTTPS: ${{ vars.ENABLE_HTTPS != '' && vars.ENABLE_HTTPS || secrets.ENABLE_HTTPS }}
+          SSL_CERT_PATH: ${{ vars.SSL_CERT_PATH != '' && vars.SSL_CERT_PATH || secrets.SSL_CERT_PATH }}
+          SSL_KEY_PATH: ${{ vars.SSL_KEY_PATH != '' && vars.SSL_KEY_PATH || secrets.SSL_KEY_PATH }}
         run: |
           set -euxo pipefail
           SSH_COMMON_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
@@ -117,10 +120,13 @@ jobs:
           DEPLOY_PATH_B64="$(printf '%s' "${DEPLOY_PATH}" | base64 | tr -d '\n')"
           GHCR_USERNAME_B64="$(printf '%s' "${GHCR_USERNAME}" | base64 | tr -d '\n')"
           GHCR_TOKEN_B64="$(printf '%s' "${GHCR_TOKEN}" | base64 | tr -d '\n')"
-          ADMIN_TOKEN_B64="$(printf '%s' "${ADMIN_TOKEN}" | base64 | tr -d '\n')"
           ADMIN_EMAIL_B64="$(printf '%s' "${ADMIN_EMAIL}" | base64 | tr -d '\n')"
           ADMIN_PASSWORD_B64="$(printf '%s' "${ADMIN_PASSWORD}" | base64 | tr -d '\n')"
           ADMIN_JWT_SECRET_B64="$(printf '%s' "${ADMIN_JWT_SECRET}" | base64 | tr -d '\n')"
+          SERVER_NAME_B64="$(printf '%s' "${SERVER_NAME}" | base64 | tr -d '\n')"
+          ENABLE_HTTPS_B64="$(printf '%s' "${ENABLE_HTTPS}" | base64 | tr -d '\n')"
+          SSL_CERT_PATH_B64="$(printf '%s' "${SSL_CERT_PATH}" | base64 | tr -d '\n')"
+          SSL_KEY_PATH_B64="$(printf '%s' "${SSL_KEY_PATH}" | base64 | tr -d '\n')"
 
           COMPOSE_SRC="deploy/docker-compose.prod.yml"
           if [ ! -f "${COMPOSE_SRC}" ] && [ -f "docker-compose.prod.yml" ]; then
@@ -145,18 +151,22 @@ jobs:
 
           echo "[deploy] run remote deploy script"
           timeout 900 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
-            "export DEPLOY_PATH_B64='${DEPLOY_PATH_B64}' GHCR_USERNAME_B64='${GHCR_USERNAME_B64}' GHCR_TOKEN_B64='${GHCR_TOKEN_B64}' ADMIN_TOKEN_B64='${ADMIN_TOKEN_B64}' ADMIN_EMAIL_B64='${ADMIN_EMAIL_B64}' ADMIN_PASSWORD_B64='${ADMIN_PASSWORD_B64}' ADMIN_JWT_SECRET_B64='${ADMIN_JWT_SECRET_B64}'; bash -se" << 'EOF'
+            "export DEPLOY_PATH_B64='${DEPLOY_PATH_B64}' GHCR_USERNAME_B64='${GHCR_USERNAME_B64}' GHCR_TOKEN_B64='${GHCR_TOKEN_B64}' ADMIN_EMAIL_B64='${ADMIN_EMAIL_B64}' ADMIN_PASSWORD_B64='${ADMIN_PASSWORD_B64}' ADMIN_JWT_SECRET_B64='${ADMIN_JWT_SECRET_B64}' SERVER_NAME_B64='${SERVER_NAME_B64}' ENABLE_HTTPS_B64='${ENABLE_HTTPS_B64}' SSL_CERT_PATH_B64='${SSL_CERT_PATH_B64}' SSL_KEY_PATH_B64='${SSL_KEY_PATH_B64}'; bash -se" << 'EOF'
           set -euo pipefail
 
           DEPLOY_PATH="$(printf '%s' "${DEPLOY_PATH_B64}" | base64 -d)"
           GHCR_USERNAME="$(printf '%s' "${GHCR_USERNAME_B64}" | base64 -d)"
           GHCR_TOKEN="$(printf '%s' "${GHCR_TOKEN_B64}" | base64 -d)"
-          ADMIN_TOKEN="$(printf '%s' "${ADMIN_TOKEN_B64}" | base64 -d)"
           ADMIN_EMAIL="$(printf '%s' "${ADMIN_EMAIL_B64}" | base64 -d)"
           ADMIN_PASSWORD="$(printf '%s' "${ADMIN_PASSWORD_B64}" | base64 -d)"
           ADMIN_JWT_SECRET="$(printf '%s' "${ADMIN_JWT_SECRET_B64}" | base64 -d)"
+          SERVER_NAME="$(printf '%s' "${SERVER_NAME_B64}" | base64 -d)"
+          ENABLE_HTTPS="$(printf '%s' "${ENABLE_HTTPS_B64}" | base64 -d)"
+          SSL_CERT_PATH="$(printf '%s' "${SSL_CERT_PATH_B64}" | base64 -d)"
+          SSL_KEY_PATH="$(printf '%s' "${SSL_KEY_PATH_B64}" | base64 -d)"
           GHCR_NAMESPACE="${GHCR_USERNAME}"
-          export ADMIN_TOKEN ADMIN_EMAIL ADMIN_PASSWORD ADMIN_JWT_SECRET GHCR_NAMESPACE
+          export ADMIN_EMAIL ADMIN_PASSWORD ADMIN_JWT_SECRET GHCR_NAMESPACE
+          export SERVER_NAME ENABLE_HTTPS SSL_CERT_PATH SSL_KEY_PATH
 
           case "${DEPLOY_PATH}" in
             "~")
