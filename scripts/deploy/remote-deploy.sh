@@ -95,14 +95,18 @@ fi
 docker compose "${COMPOSE_ARGS[@]}" ps
 ok=0
 for i in $(seq 1 30); do
+  echo "[deploy] waiting for license-server health (${i}/30)"
   if timeout 20 docker compose "${COMPOSE_ARGS[@]}" exec -T license-server \
     node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r=>{if(!r.ok) process.exit(1)}).catch(()=>process.exit(1))"; then
     ok=1
+    echo "[deploy] license-server health check passed"
     break
   fi
+  timeout 10 docker compose "${COMPOSE_ARGS[@]}" ps || true
   sleep 2
 done
 if [ "${ok}" -ne 1 ]; then
+  echo "[deploy] license-server health check did not pass in time"
   docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 license-server
   docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 postgres
   docker compose "${COMPOSE_ARGS[@]}" logs --tail=100 admin-web
@@ -110,4 +114,41 @@ if [ "${ok}" -ne 1 ]; then
 fi
 
 # 2) Start admin-web only after API is healthy.
+echo "[deploy] starting admin-web"
 timeout 180 docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans admin-web
+echo "[deploy] admin-web started"
+
+web_ok=0
+for i in $(seq 1 30); do
+  echo "[deploy] waiting for admin-web running (${i}/30)"
+  if timeout 10 docker compose "${COMPOSE_ARGS[@]}" ps --status running --services | grep -qx "admin-web"; then
+    web_ok=1
+    break
+  fi
+  timeout 10 docker compose "${COMPOSE_ARGS[@]}" ps || true
+  sleep 2
+done
+if [ "${web_ok}" -ne 1 ]; then
+  echo "[deploy] admin-web did not reach running state"
+  docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 admin-web || true
+  docker compose "${COMPOSE_ARGS[@]}" ps || true
+  exit 1
+fi
+
+web_health_ok=0
+for i in $(seq 1 30); do
+  echo "[deploy] waiting for admin-web http check (${i}/30)"
+  if timeout 20 docker compose "${COMPOSE_ARGS[@]}" exec -T admin-web \
+    wget -qO- http://127.0.0.1/ >/dev/null 2>&1; then
+    web_health_ok=1
+    echo "[deploy] admin-web http check passed"
+    break
+  fi
+  sleep 2
+done
+if [ "${web_health_ok}" -ne 1 ]; then
+  echo "[deploy] admin-web http check failed"
+  docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 admin-web || true
+  docker compose "${COMPOSE_ARGS[@]}" ps || true
+  exit 1
+fi
