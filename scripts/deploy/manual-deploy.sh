@@ -12,10 +12,11 @@ set -euxo pipefail
 : "${ADMIN_EMAIL:?ADMIN_EMAIL is required}"
 : "${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}"
 : "${ADMIN_JWT_SECRET:?ADMIN_JWT_SECRET is required}"
-: "${SERVER_NAME:?SERVER_NAME is required}"
-: "${ENABLE_HTTPS:?ENABLE_HTTPS is required}"
-: "${SSL_CERT_PATH:?SSL_CERT_PATH is required}"
-: "${SSL_KEY_PATH:?SSL_KEY_PATH is required}"
+
+SERVER_NAME="${SERVER_NAME:-_}"
+ENABLE_HTTPS="${ENABLE_HTTPS:-true}"
+SSL_CERT_PATH="${SSL_CERT_PATH:-/etc/letsencrypt/live/lc.skkim.dev/fullchain.pem}"
+SSL_KEY_PATH="${SSL_KEY_PATH:-/etc/letsencrypt/live/lc.skkim.dev/privkey.pem}"
 
 SSH_COMMON_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
 
