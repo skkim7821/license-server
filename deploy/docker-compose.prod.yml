@@ -18,7 +18,7 @@ services:
       retries: 20
 
   license-server:
-    image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server:main
+    image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server:${BACKEND_IMAGE_TAG:-main}
     container_name: license-server
     restart: unless-stopped
     depends_on:
@@ -39,7 +39,7 @@ services:
       start_period: 15s
 
   admin-web:
-    image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server-admin-web:main
+    image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server-admin-web:${ADMIN_WEB_IMAGE_TAG:-main}
     container_name: license-admin-web
     restart: unless-stopped
     depends_on:

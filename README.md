@@ -41,7 +41,7 @@
 - `pnpm run frontend:build`: React 관리자 UI 프로덕션 빌드 검증
 
 진행 현황 추적 방법은 [`docs/progress-tracking.md`](/Users/skkim/testspace/license-server/docs/progress-tracking.md) 참고.
-추가 기준 문서는 [`docs/phase0-decisions.md`](/Users/skkim/testspace/license-server/docs/phase0-decisions.md), [`docs/phase1-baseline.md`](/Users/skkim/testspace/license-server/docs/phase1-baseline.md), [`docs/admin-ui-parity-plan.md`](/Users/skkim/testspace/license-server/docs/admin-ui-parity-plan.md), [`docs/data-migration-playbook.md`](/Users/skkim/testspace/license-server/docs/data-migration-playbook.md) 참고.
+추가 기준 문서는 [`docs/phase0-decisions.md`](/Users/skkim/testspace/license-server/docs/phase0-decisions.md), [`docs/phase1-baseline.md`](/Users/skkim/testspace/license-server/docs/phase1-baseline.md), [`docs/admin-ui-parity-plan.md`](/Users/skkim/testspace/license-server/docs/admin-ui-parity-plan.md), [`docs/data-migration-playbook.md`](/Users/skkim/testspace/license-server/docs/data-migration-playbook.md), [`docs/deployment-playbook.md`](/Users/skkim/testspace/license-server/docs/deployment-playbook.md) 참고.
 
 ## 서버 배포 (Docker Compose)
 1. 서버에 코드 배포 후 루트 디렉터리 이동
@@ -91,7 +91,7 @@ curl -fsS http://127.0.0.1/health
 - 인증서가 없으면 admin-web은 HTTP 모드로 자동 fallback.
 
 ## GitHub Actions 환경 변수 정리
-`publish-ghcr.yml`의 `deploy` job이 읽는 설정값입니다.  
+`deploy-manual.yml`(수동 배포 워크플로우)이 읽는 설정값입니다.  
 설정 위치: GitHub 저장소 `Settings > Secrets and variables > Actions`
 
 ### 우선순위 규칙

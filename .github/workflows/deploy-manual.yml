@@ -1,0 +1,206 @@
+name: Deploy to server (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_tag:
+        description: "Backend image tag (vX.Y.Z)"
+        required: true
+      admin_tag:
+        description: "Admin-web image tag (vX.Y.Z)"
+        required: true
+      confirm:
+        description: "Type DEPLOY_NOW to continue"
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event.inputs.confirm == 'DEPLOY_NOW' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate inputs
+        env:
+          BACKEND_TAG: ${{ github.event.inputs.backend_tag }}
+          ADMIN_TAG: ${{ github.event.inputs.admin_tag }}
+        run: |
+          set -euo pipefail
+          tag_regex='^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'
+          if ! printf '%s' "${BACKEND_TAG}" | grep -Eq "${tag_regex}"; then
+            echo "Invalid backend_tag: ${BACKEND_TAG}"
+            exit 1
+          fi
+          if ! printf '%s' "${ADMIN_TAG}" | grep -Eq "${tag_regex}"; then
+            echo "Invalid admin_tag: ${ADMIN_TAG}"
+            exit 1
+          fi
+
+      - name: Prepare SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Deploy selected version tags
+        env:
+          BACKEND_IMAGE_TAG: ${{ github.event.inputs.backend_tag }}
+          ADMIN_WEB_IMAGE_TAG: ${{ github.event.inputs.admin_tag }}
+          SSH_HOST: ${{ vars.SSH_HOST != '' && vars.SSH_HOST || secrets.SSH_HOST }}
+          SSH_PORT: ${{ vars.SSH_PORT != '' && vars.SSH_PORT || secrets.SSH_PORT }}
+          SSH_USER: ${{ vars.SSH_USER != '' && vars.SSH_USER || secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH != '' && vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
+          GHCR_USERNAME: ${{ vars.GHCR_USERNAME != '' && vars.GHCR_USERNAME || secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL != '' && vars.ADMIN_EMAIL || secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ vars.ADMIN_PASSWORD != '' && vars.ADMIN_PASSWORD || secrets.ADMIN_PASSWORD }}
+          ADMIN_JWT_SECRET: ${{ vars.ADMIN_JWT_SECRET != '' && vars.ADMIN_JWT_SECRET || secrets.ADMIN_JWT_SECRET }}
+          SERVER_NAME: ${{ vars.SERVER_NAME != '' && vars.SERVER_NAME || secrets.SERVER_NAME }}
+          ENABLE_HTTPS: ${{ vars.ENABLE_HTTPS != '' && vars.ENABLE_HTTPS || secrets.ENABLE_HTTPS }}
+          SSL_CERT_PATH: ${{ vars.SSL_CERT_PATH != '' && vars.SSL_CERT_PATH || secrets.SSL_CERT_PATH }}
+          SSL_KEY_PATH: ${{ vars.SSL_KEY_PATH != '' && vars.SSL_KEY_PATH || secrets.SSL_KEY_PATH }}
+        run: |
+          set -euxo pipefail
+          SSH_COMMON_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          retry() {
+            local attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local n=1
+            until "$@"; do
+              if [ "${n}" -ge "${attempts}" ]; then
+                return 1
+              fi
+              n=$((n + 1))
+              sleep "${sleep_seconds}"
+            done
+          }
+
+          DEPLOY_PATH_B64="$(printf '%s' "${DEPLOY_PATH}" | base64 | tr -d '\n')"
+          GHCR_USERNAME_B64="$(printf '%s' "${GHCR_USERNAME}" | base64 | tr -d '\n')"
+          GHCR_TOKEN_B64="$(printf '%s' "${GHCR_TOKEN}" | base64 | tr -d '\n')"
+          ADMIN_EMAIL_B64="$(printf '%s' "${ADMIN_EMAIL}" | base64 | tr -d '\n')"
+          ADMIN_PASSWORD_B64="$(printf '%s' "${ADMIN_PASSWORD}" | base64 | tr -d '\n')"
+          ADMIN_JWT_SECRET_B64="$(printf '%s' "${ADMIN_JWT_SECRET}" | base64 | tr -d '\n')"
+          SERVER_NAME_B64="$(printf '%s' "${SERVER_NAME}" | base64 | tr -d '\n')"
+          ENABLE_HTTPS_B64="$(printf '%s' "${ENABLE_HTTPS}" | base64 | tr -d '\n')"
+          SSL_CERT_PATH_B64="$(printf '%s' "${SSL_CERT_PATH}" | base64 | tr -d '\n')"
+          SSL_KEY_PATH_B64="$(printf '%s' "${SSL_KEY_PATH}" | base64 | tr -d '\n')"
+          BACKEND_IMAGE_TAG_B64="$(printf '%s' "${BACKEND_IMAGE_TAG}" | base64 | tr -d '\n')"
+          ADMIN_WEB_IMAGE_TAG_B64="$(printf '%s' "${ADMIN_WEB_IMAGE_TAG}" | base64 | tr -d '\n')"
+
+          COMPOSE_SRC="deploy/docker-compose.prod.yml"
+          if [ ! -f "${COMPOSE_SRC}" ] && [ -f "docker-compose.prod.yml" ]; then
+            COMPOSE_SRC="docker-compose.prod.yml"
+          fi
+          if [ ! -f "${COMPOSE_SRC}" ]; then
+            echo "compose file not found in repository root."
+            ls -la
+            ls -la deploy || true
+            exit 1
+          fi
+
+          echo "[deploy] checking remote ssh connectivity"
+          retry 5 5 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "echo connected: \$(whoami)@\$(hostname)"
+
+          echo "[deploy] ensure deploy directory"
+          retry 5 5 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy'"
+
+          echo "[deploy] upload compose file"
+          retry 5 5 scp ${SSH_COMMON_OPTS} -P "${SSH_PORT}" \
+            "${COMPOSE_SRC}" "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/deploy/docker-compose.prod.yml"
+
+          echo "[deploy] run remote deploy script"
+          timeout 900 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
+            "export DEPLOY_PATH_B64='${DEPLOY_PATH_B64}' GHCR_USERNAME_B64='${GHCR_USERNAME_B64}' GHCR_TOKEN_B64='${GHCR_TOKEN_B64}' ADMIN_EMAIL_B64='${ADMIN_EMAIL_B64}' ADMIN_PASSWORD_B64='${ADMIN_PASSWORD_B64}' ADMIN_JWT_SECRET_B64='${ADMIN_JWT_SECRET_B64}' SERVER_NAME_B64='${SERVER_NAME_B64}' ENABLE_HTTPS_B64='${ENABLE_HTTPS_B64}' SSL_CERT_PATH_B64='${SSL_CERT_PATH_B64}' SSL_KEY_PATH_B64='${SSL_KEY_PATH_B64}' BACKEND_IMAGE_TAG_B64='${BACKEND_IMAGE_TAG_B64}' ADMIN_WEB_IMAGE_TAG_B64='${ADMIN_WEB_IMAGE_TAG_B64}'; bash -se" << 'EOF'
+          set -euo pipefail
+
+          DEPLOY_PATH="$(printf '%s' "${DEPLOY_PATH_B64}" | base64 -d)"
+          GHCR_USERNAME="$(printf '%s' "${GHCR_USERNAME_B64}" | base64 -d)"
+          GHCR_TOKEN="$(printf '%s' "${GHCR_TOKEN_B64}" | base64 -d)"
+          ADMIN_EMAIL="$(printf '%s' "${ADMIN_EMAIL_B64}" | base64 -d)"
+          ADMIN_PASSWORD="$(printf '%s' "${ADMIN_PASSWORD_B64}" | base64 -d)"
+          ADMIN_JWT_SECRET="$(printf '%s' "${ADMIN_JWT_SECRET_B64}" | base64 -d)"
+          SERVER_NAME="$(printf '%s' "${SERVER_NAME_B64}" | base64 -d)"
+          ENABLE_HTTPS="$(printf '%s' "${ENABLE_HTTPS_B64}" | base64 -d)"
+          SSL_CERT_PATH="$(printf '%s' "${SSL_CERT_PATH_B64}" | base64 -d)"
+          SSL_KEY_PATH="$(printf '%s' "${SSL_KEY_PATH_B64}" | base64 -d)"
+          BACKEND_IMAGE_TAG="$(printf '%s' "${BACKEND_IMAGE_TAG_B64}" | base64 -d)"
+          ADMIN_WEB_IMAGE_TAG="$(printf '%s' "${ADMIN_WEB_IMAGE_TAG_B64}" | base64 -d)"
+          GHCR_NAMESPACE="${GHCR_USERNAME}"
+          export ADMIN_EMAIL ADMIN_PASSWORD ADMIN_JWT_SECRET GHCR_NAMESPACE
+          export SERVER_NAME ENABLE_HTTPS SSL_CERT_PATH SSL_KEY_PATH
+          export BACKEND_IMAGE_TAG ADMIN_WEB_IMAGE_TAG
+
+          case "${DEPLOY_PATH}" in
+            "~")
+              DEPLOY_PATH="${HOME}"
+              ;;
+            "~/"*)
+              DEPLOY_PATH="${HOME}/${DEPLOY_PATH#~/}"
+              ;;
+          esac
+
+          if [ ! -d "${DEPLOY_PATH}" ]; then
+            echo "DEPLOY_PATH does not exist: ${DEPLOY_PATH}"
+            exit 1
+          fi
+
+          cd "${DEPLOY_PATH}"
+
+          if [ ! -f deploy/docker-compose.prod.yml ]; then
+            echo "deploy/docker-compose.prod.yml not found in DEPLOY_PATH: ${DEPLOY_PATH}"
+            exit 1
+          fi
+
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+
+          # Remove legacy standalone app containers to avoid name conflicts.
+          docker rm -f license-server license-admin-web >/dev/null 2>&1 || true
+
+          timeout 300 docker compose -f deploy/docker-compose.prod.yml pull
+          timeout 300 docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
+          seeded=0
+          for i in $(seq 1 15); do
+            if timeout 45 docker compose -f deploy/docker-compose.prod.yml exec -T license-server pnpm run seed:prod; then
+              seeded=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "${seeded}" -ne 1 ]; then
+            echo "admin seed failed after retries"
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 license-server
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 postgres
+            exit 1
+          fi
+
+          docker compose -f deploy/docker-compose.prod.yml ps
+          ok=0
+          for i in $(seq 1 30); do
+            if timeout 20 docker compose -f deploy/docker-compose.prod.yml exec -T license-server \
+              node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r=>{if(!r.ok) process.exit(1)}).catch(()=>process.exit(1))"; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "${ok}" -ne 1 ]; then
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 license-server
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 postgres
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=100 admin-web
+            exit 1
+          fi
+          EOF
