@@ -171,7 +171,26 @@ jobs:
           docker rm -f license-server license-admin-web >/dev/null 2>&1 || true
 
           timeout 300 docker compose -f deploy/docker-compose.prod.yml pull
-          timeout 300 docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
+
+          # 1) Bring up DB + API first. Admin-web depends on healthy API and can fail early otherwise.
+          timeout 300 docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans postgres license-server
+
+          api_started=0
+          for i in $(seq 1 30); do
+            if timeout 10 docker compose -f deploy/docker-compose.prod.yml ps --status running --services | grep -qx "license-server"; then
+              api_started=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "${api_started}" -ne 1 ]; then
+            echo "license-server container did not reach running state"
+            docker compose -f deploy/docker-compose.prod.yml ps
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 license-server
+            docker compose -f deploy/docker-compose.prod.yml logs --tail=200 postgres
+            exit 1
+          fi
+
           seeded=0
           for i in $(seq 1 15); do
             if timeout 45 docker compose -f deploy/docker-compose.prod.yml exec -T license-server pnpm run seed:prod; then
@@ -203,4 +222,7 @@ jobs:
             docker compose -f deploy/docker-compose.prod.yml logs --tail=100 admin-web
             exit 1
           fi
+
+          # 2) Start admin-web only after API is healthy.
+          timeout 180 docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans admin-web
           EOF
