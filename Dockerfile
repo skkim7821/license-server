@@ -4,7 +4,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV TMPDIR=/app/tmp
 
-RUN corepack enable && mkdir -p /app/tmp /app/db
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable \
+  && mkdir -p /app/tmp /app/db
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
