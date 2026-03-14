@@ -40,7 +40,7 @@ services:
 
   admin-web:
     image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server-admin-web:${ADMIN_WEB_IMAGE_TAG:-main}
-    container_name: license-admin-web
+    container_name: license-server-admin-web
     restart: unless-stopped
     depends_on:
       license-server:
