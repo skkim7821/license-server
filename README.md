@@ -249,14 +249,20 @@ docker container prune -f
 - `GET /admin/licenses`: 발급된 라이선스 목록을 이메일 오름차순으로 조회
 - `POST /admin/bulk/licenses`: 제품 등록과 다수 라이선스 발급을 동시에 수행
 - `PATCH /admin/licenses/:id/extend`: 라이선스 만료일 연장
-- `PATCH /admin/licenses/:id/status`: 라이선스 상태 변경(`active|revoked|expired`)
+- `PATCH /admin/licenses/:id/status`: 라이선스 상태 변경(`active|revoked`, 운영차단 해제/영구차단 보조용)
+- `PATCH /admin/licenses/:id/suspend`: 운영 차단 적용(`suspended`) + 차단 사유/메모/담당자 기록
+- `PATCH /admin/licenses/:id/unsuspend`: 운영 차단 해제(`active`) + 해제 이력 기록
 - `DELETE /admin/licenses/:id`: 라이선스 및 연결 디바이스 삭제
 
 ### 라이선스 검증 (`/license/verify`)
 - 요청: `{ licenseKey }`, 선택: `ipAddr`
-- 전달된 IP/헤더를 기준으로 디바이스 등록, 최대 허용 장치 수 초과시 403
-- 만료되면 `status`를 `expired`로 갱신하고 403 반환
+- 판정 순서: `not_found` -> `suspended/revoked` -> 시간 만료(`expiresAt`) -> 디바이스 제한 -> 성공
+- 시간 만료는 DB `status` 갱신 없이 계산으로만 판단 (`expired`는 시간 만료 의미로만 사용)
+- 운영 차단 시 `blockReason`, `blockNote`를 함께 반환
+- 전달된 IP/헤더를 기준으로 디바이스 등록, 최대 허용 장치 수 초과 시 `reason=max_devices_reached` 반환
 - 성공 시 `expiresAt`과 남은 디바이스 수(`remainingDevices`) 반환
+- 실패 reason 예시: `expired`, `suspended`, `revoked`, `max_devices_reached`, `not_found`
+- 상세 리팩터링/마이그레이션 의도: `docs/license-status-refactor.md`
 
 ### 사용자 구매 정보 (`/license/user-info`)
 - 필수 쿼리: `email`, 선택 쿼리: `name`

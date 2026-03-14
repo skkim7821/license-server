@@ -25,6 +25,13 @@ export type LicenseRecord = {
   email: string;
   productCode: string;
   expiresAt: string;
-  status: "active" | "revoked" | "expired";
+  status: "active" | "suspended" | "revoked" | "expired";
+  blockReason: "abuse" | "manual_review" | "security_risk" | "server_impact" | "billing_issue" | "other" | null;
+  blockedAt: string | null;
+  blockedBy: string | null;
+  blockNote: string | null;
+  unblockedAt: string | null;
+  unblockedBy: string | null;
+  unblockedNote: string | null;
   maxDevices: number;
 };

@@ -127,6 +127,13 @@ const licenseResponseSchema = {
         productCode: { type: "string" },
         expiresAt: { type: "string", format: "date-time" },
         status: { type: "string" },
+        blockReason: { type: "string", nullable: true },
+        blockedAt: { type: "string", format: "date-time", nullable: true },
+        blockedBy: { type: "string", nullable: true },
+        blockNote: { type: "string", nullable: true },
+        unblockedAt: { type: "string", format: "date-time", nullable: true },
+        unblockedBy: { type: "string", nullable: true },
+        unblockedNote: { type: "string", nullable: true },
         maxDevices: { type: "integer" },
       },
       required: ["id", "licenseKey", "email", "productCode", "expiresAt", "status", "maxDevices"],
@@ -159,7 +166,7 @@ const bulkLicensePayloadSchema = {
           email: { type: "string", format: "email" },
           maxDevices: { type: "integer", minimum: 1 },
           expiresInDays: { type: "integer", minimum: 1 },
-          status: { type: "string", enum: ["active", "revoked", "expired"] },
+          status: { type: "string", enum: ["active", "revoked", "suspended"] },
         },
       },
     },
@@ -181,6 +188,13 @@ const bulkLicenseResponseSchema = {
           productCode: { type: "string" },
           expiresAt: { type: "string", format: "date-time" },
           status: { type: "string" },
+          blockReason: { type: "string", nullable: true },
+          blockedAt: { type: "string", format: "date-time", nullable: true },
+          blockedBy: { type: "string", nullable: true },
+          blockNote: { type: "string", nullable: true },
+          unblockedAt: { type: "string", format: "date-time", nullable: true },
+          unblockedBy: { type: "string", nullable: true },
+          unblockedNote: { type: "string", nullable: true },
           maxDevices: { type: "integer" },
         },
         required: ["id", "licenseKey", "email", "productCode", "expiresAt", "status", "maxDevices"],
@@ -217,7 +231,28 @@ const changeLicenseStatusPayloadSchema = {
   type: "object",
   required: ["status"],
   properties: {
-    status: { type: "string", enum: ["active", "revoked", "expired"] },
+    status: { type: "string", enum: ["active", "revoked"] },
+  },
+};
+
+const suspendLicensePayloadSchema = {
+  type: "object",
+  required: ["reason"],
+  properties: {
+    reason: {
+      type: "string",
+      enum: ["abuse", "manual_review", "security_risk", "server_impact", "billing_issue", "other"],
+    },
+    blockedBy: { type: "string" },
+    note: { type: "string" },
+  },
+};
+
+const unsuspendLicensePayloadSchema = {
+  type: "object",
+  properties: {
+    unblockedBy: { type: "string" },
+    note: { type: "string" },
   },
 };
 
@@ -299,7 +334,7 @@ type BulkLicenseEntry = {
   email: string;
   maxDevices?: number;
   expiresInDays?: number;
-  status?: "active" | "revoked" | "expired";
+  status?: "active" | "revoked" | "suspended";
 };
 
 type BulkLicenseBody = {
@@ -316,7 +351,18 @@ type ExtendLicenseBody = {
 };
 
 type ChangeLicenseStatusBody = {
-  status: "active" | "revoked" | "expired";
+  status: "active" | "revoked";
+};
+
+type SuspendLicenseBody = {
+  reason: "abuse" | "manual_review" | "security_risk" | "server_impact" | "billing_issue" | "other";
+  blockedBy?: string;
+  note?: string;
+};
+
+type UnsuspendLicenseBody = {
+  unblockedBy?: string;
+  note?: string;
 };
 
 type AdminLoginBody = {
@@ -343,7 +389,7 @@ type LicenseInsertPayload = {
   userId?: string;
   productCode: string;
   expiresAt: Date;
-  status: "active" | "revoked" | "expired";
+  status: "active" | "revoked" | "suspended";
   maxDevices: number;
 };
 
@@ -386,6 +432,45 @@ async function ensureUserByEmail(email: string) {
       email: normalizedEmail,
     },
   });
+}
+
+type LicenseApiStatus = "active" | "suspended" | "revoked" | "expired";
+
+function toApiLicenseStatus(license: { status: string; expiresAt: Date }): LicenseApiStatus {
+  if (license.status === "suspended" || license.status === "revoked") {
+    return license.status;
+  }
+
+  const now = new Date();
+  if (license.expiresAt <= now) {
+    return "expired";
+  }
+
+  return "active";
+}
+
+function toLicenseResponse(
+  license: {
+    id: string;
+    licenseKey: string;
+    email: string;
+    productCode: string;
+    expiresAt: Date;
+    status: string;
+    blockReason: string | null;
+    blockedAt: Date | null;
+    blockedBy: string | null;
+    blockNote: string | null;
+    unblockedAt: Date | null;
+    unblockedBy: string | null;
+    unblockedNote: string | null;
+    maxDevices: number;
+  }
+) {
+  return {
+    ...license,
+    status: toApiLicenseStatus(license),
+  };
 }
 
 function extractBearerToken(request: FastifyRequest): string | null {
@@ -900,7 +985,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         maxDevices: product.maxDevices,
       });
 
-      return reply.status(201).send({ license });
+      return reply.status(201).send({ license: toLicenseResponse(license) });
     }
   );
   fastify.get(
@@ -928,11 +1013,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
           productCode: true,
           expiresAt: true,
           status: true,
+          blockReason: true,
+          blockedAt: true,
+          blockedBy: true,
+          blockNote: true,
+          unblockedAt: true,
+          unblockedBy: true,
+          unblockedNote: true,
           maxDevices: true,
         },
       });
 
-      return reply.send({ licenses });
+      return reply.send({ licenses: licenses.map((license: (typeof licenses)[number]) => toLicenseResponse(license)) });
     }
   );
 
@@ -986,7 +1078,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const createdLicenses = [];
+      const createdLicenses: Awaited<ReturnType<typeof createLicenseWithGeneratedKey>>[] = [];
       for (const licenseInput of licenseInputs) {
         const normalizedEmail = licenseInput.email.toLowerCase().trim();
 
@@ -1022,7 +1114,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           maxDevices: product.maxDevices,
           defaultPeriod: product.defaultPeriod,
         },
-        licenses: createdLicenses,
+        licenses: createdLicenses.map((license) => toLicenseResponse(license)),
       });
     }
   );
@@ -1060,17 +1152,17 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const now = new Date();
       const baseDate = license.expiresAt > now ? license.expiresAt : now;
       const extendedExpiresAt = addDays(baseDate, Number(days));
-      const nextStatus = extendedExpiresAt > now ? "active" : license.status;
+      const shouldResetLegacyExpired = license.status === "expired";
 
       const updated = await prisma.license.update({
         where: { id },
         data: {
           expiresAt: extendedExpiresAt,
-          status: nextStatus,
+          ...(shouldResetLegacyExpired ? { status: "active" } : {}),
         },
       });
 
-      return reply.send({ license: updated });
+      return reply.send({ license: toLicenseResponse(updated) });
     }
   );
 
@@ -1079,7 +1171,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     {
       schema: {
         summary: "Change license status",
-        description: "Updates the status of an existing license.",
+        description: "Updates non-suspension status of an existing license (active/revoked).",
         tags: ["admin"],
         params: licenseIdParamsSchema,
         body: changeLicenseStatusPayloadSchema,
@@ -1103,22 +1195,119 @@ export async function adminRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: "License not found" });
       }
 
-      const updateData =
-        status === "expired"
-          ? {
-              status,
-              expiresAt: new Date(),
-            }
-          : {
-              status,
-            };
+      const updated = await prisma.license.update({
+        where: { id },
+        data:
+          status === "active"
+            ? {
+                status,
+                blockReason: null,
+                blockedAt: null,
+                blockedBy: null,
+                blockNote: null,
+              }
+            : {
+                status: "revoked",
+                blockReason: license.blockReason ?? "manual_review",
+                blockedAt: license.blockedAt ?? new Date(),
+                blockedBy: license.blockedBy ?? "admin",
+                blockNote: license.blockNote ?? "revoked_by_admin",
+              },
+      });
+
+      return reply.send({ license: toLicenseResponse(updated) });
+    }
+  );
+
+  fastify.patch(
+    "/licenses/:id/suspend",
+    {
+      schema: {
+        summary: "Suspend a license",
+        description: "Operationally blocks a license without changing expiresAt.",
+        tags: ["admin"],
+        params: licenseIdParamsSchema,
+        body: suspendLicensePayloadSchema,
+        response: {
+          200: licenseResponseSchema,
+          400: productErrorSchema,
+          401: productErrorSchema,
+          404: productErrorSchema,
+        },
+        security: [{ bearerAuth: [] }],
+      },
+      attachValidation: true,
+      preHandler: requireAdmin,
+    },
+    async (request, reply) => {
+      const { id } = request.params as LicenseIdParams;
+      const { reason, blockedBy, note } = request.body as SuspendLicenseBody;
+      const adminContext = getAdminContext(request);
+
+      const license = await prisma.license.findUnique({ where: { id } });
+      if (!license) {
+        return reply.status(404).send({ error: "License not found" });
+      }
 
       const updated = await prisma.license.update({
         where: { id },
-        data: updateData,
+        data: {
+          status: "suspended",
+          blockReason: reason,
+          blockedAt: new Date(),
+          blockedBy: blockedBy?.trim() || adminContext?.adminId || "admin",
+          blockNote: note?.trim() || null,
+        },
       });
 
-      return reply.send({ license: updated });
+      return reply.send({ license: toLicenseResponse(updated) });
+    }
+  );
+
+  fastify.patch(
+    "/licenses/:id/unsuspend",
+    {
+      schema: {
+        summary: "Unsuspend a license",
+        description: "Removes suspension and returns status to active.",
+        tags: ["admin"],
+        params: licenseIdParamsSchema,
+        body: unsuspendLicensePayloadSchema,
+        response: {
+          200: licenseResponseSchema,
+          401: productErrorSchema,
+          404: productErrorSchema,
+        },
+        security: [{ bearerAuth: [] }],
+      },
+      attachValidation: true,
+      preHandler: requireAdmin,
+    },
+    async (request, reply) => {
+      const { id } = request.params as LicenseIdParams;
+      const { unblockedBy, note } = request.body as UnsuspendLicenseBody;
+      const adminContext = getAdminContext(request);
+
+      const license = await prisma.license.findUnique({ where: { id } });
+      if (!license) {
+        return reply.status(404).send({ error: "License not found" });
+      }
+
+      const updated = await prisma.license.update({
+        where: { id },
+        data: {
+          status: "active",
+          blockReason: null,
+          blockedAt: null,
+          blockedBy: null,
+          blockNote: null,
+          unblockedAt: new Date(),
+          unblockedBy: unblockedBy?.trim() || adminContext?.adminId || "admin",
+          unblockedNote: note?.trim() || null,
+        },
+      });
+
+      return reply.send({ license: toLicenseResponse(updated) });
     }
   );
 

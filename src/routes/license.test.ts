@@ -3,7 +3,14 @@ import { addMilliseconds, subSeconds } from "date-fns";
 import Fastify, { FastifyInstance } from "fastify";
 import { licenseRoutesFactory, LicenseRoutePrisma } from "./license";
 
-type LicenseStatus = "active" | "expired" | "revoked";
+type LicenseStatus = "active" | "expired" | "revoked" | "suspended";
+type LicenseBlockReason =
+  | "abuse"
+  | "manual_review"
+  | "security_risk"
+  | "server_impact"
+  | "billing_issue"
+  | "other";
 
 type LicenseRecord = {
   id: string;
@@ -12,6 +19,8 @@ type LicenseRecord = {
   productCode: string;
   expiresAt: Date;
   status: LicenseStatus;
+  blockReason?: LicenseBlockReason | null;
+  blockNote?: string | null;
   maxDevices: number;
   devices: { ipAddr: string }[];
   product?: {
@@ -202,7 +211,7 @@ describe("licenseRoutes /verify", () => {
     });
   });
 
-  test("marks expired licenses and rejects them", async () => {
+  test("rejects expired licenses without mutating status", async () => {
     const expiredLicense: LicenseRecord = {
       id: "license-1",
       email: "owner@example.com",
@@ -226,9 +235,74 @@ describe("licenseRoutes /verify", () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ valid: false, reason: "expired" });
-    expect(mock.updateCalls).toEqual([
-      { where: { id: "license-1" }, data: { status: "expired" } },
-    ]);
+    expect(mock.updateCalls).toEqual([]);
+  });
+
+  test("rejects suspended licenses with block metadata", async () => {
+    const suspendedLicense: LicenseRecord = {
+      id: "license-suspended",
+      licenseKey: "LIC-SUSP-0000-0000-0000",
+      email: "owner@example.com",
+      productCode: "PROD",
+      expiresAt: addMilliseconds(new Date(), 1_000_000),
+      status: "suspended",
+      blockReason: "security_risk",
+      blockNote: "too many abnormal requests",
+      maxDevices: 3,
+      devices: [],
+    };
+    const mock = createMockPrisma(suspendedLicense);
+    app = await buildApp(mock.stub);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/license/verify",
+      payload: {
+        licenseKey: suspendedLicense.licenseKey,
+        ipAddr: "finger1",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      valid: false,
+      reason: "suspended",
+      blockReason: "security_risk",
+      blockNote: "too many abnormal requests",
+    });
+  });
+
+  test("rejects revoked licenses before expiration check", async () => {
+    const revokedLicense: LicenseRecord = {
+      id: "license-revoked",
+      licenseKey: "LIC-REVO-0000-0000-0000",
+      email: "owner@example.com",
+      productCode: "PROD",
+      expiresAt: addMilliseconds(new Date(), 1_000_000),
+      status: "revoked",
+      blockReason: "abuse",
+      maxDevices: 3,
+      devices: [],
+    };
+    const mock = createMockPrisma(revokedLicense);
+    app = await buildApp(mock.stub);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/license/verify",
+      payload: {
+        licenseKey: revokedLicense.licenseKey,
+        ipAddr: "finger1",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      valid: false,
+      reason: "revoked",
+      blockReason: "abuse",
+      blockNote: null,
+    });
   });
 
   test("falls back to x-forwarded-for header", async () => {

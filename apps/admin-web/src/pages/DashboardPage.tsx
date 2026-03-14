@@ -19,9 +19,10 @@ export function DashboardPage({ users, products, licenses }: DashboardProps) {
     }).length;
 
     const expired = licenses.filter((item) => item.status === "expired").length;
+    const suspended = licenses.filter((item) => item.status === "suspended").length;
     const revoked = licenses.filter((item) => item.status === "revoked").length;
 
-    return { expiresSoon, expired, revoked };
+    return { expiresSoon, expired, suspended, revoked };
   }, [licenses]);
 
   const productSummaries = useMemo(
@@ -57,9 +58,9 @@ export function DashboardPage({ users, products, licenses }: DashboardProps) {
           <strong>{metrics.expiresSoon}</strong>
         </article>
         <article className="card metric">
-          <p>Expired / Revoked</p>
+          <p>Expired / Suspended / Revoked</p>
           <strong>
-            {metrics.expired} / {metrics.revoked}
+            {metrics.expired} / {metrics.suspended} / {metrics.revoked}
           </strong>
         </article>
       </div>

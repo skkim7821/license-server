@@ -46,6 +46,13 @@ model License {
   productCode String
   expiresAt   DateTime
   status      LicenseStatus  @default(active)
+  blockReason LicenseBlockReason?
+  blockedAt   DateTime?
+  blockedBy   String?
+  blockNote   String?
+  unblockedAt DateTime?
+  unblockedBy String?
+  unblockedNote String?
   maxDevices  Int
   user        User?          @relation(fields: [userId], references: [id])
   product     Product        @relation(fields: [productCode], references: [code])
@@ -66,8 +73,18 @@ model LicenseDevice {
 
 enum LicenseStatus {
   active
+  suspended
   revoked
   expired
+}
+
+enum LicenseBlockReason {
+  abuse
+  manual_review
+  security_risk
+  server_impact
+  billing_issue
+  other
 }
 
 enum AdminRole {

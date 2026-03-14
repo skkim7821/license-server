@@ -112,11 +112,33 @@ export const adminApi = {
       body: { days },
     });
   },
-  setLicenseStatus(token: string, id: string, status: LicenseRecord["status"]) {
+  setLicenseStatus(token: string, id: string, status: "active" | "revoked") {
     return request<{ license: LicenseRecord }>(`/admin/licenses/${id}/status`, {
       method: "PATCH",
       token,
       body: { status },
+    });
+  },
+  suspendLicense(
+    token: string,
+    id: string,
+    payload: {
+      reason: "abuse" | "manual_review" | "security_risk" | "server_impact" | "billing_issue" | "other";
+      blockedBy?: string;
+      note?: string;
+    }
+  ) {
+    return request<{ license: LicenseRecord }>(`/admin/licenses/${id}/suspend`, {
+      method: "PATCH",
+      token,
+      body: payload,
+    });
+  },
+  unsuspendLicense(token: string, id: string, payload?: { unblockedBy?: string; note?: string }) {
+    return request<{ license: LicenseRecord }>(`/admin/licenses/${id}/unsuspend`, {
+      method: "PATCH",
+      token,
+      body: payload ?? {},
     });
   },
   deleteLicense(token: string, id: string) {

@@ -844,12 +844,19 @@ describe("adminRoutes", () => {
         productCode: true,
         expiresAt: true,
         status: true,
+        blockReason: true,
+        blockedAt: true,
+        blockedBy: true,
+        blockNote: true,
+        unblockedAt: true,
+        unblockedBy: true,
+        unblockedNote: true,
         maxDevices: true,
       },
     });
   });
 
-  test("extends a license and reactivates when expiration moves to future", async () => {
+  test("extends a license and resets legacy expired status", async () => {
     const current = {
       id: "license-x",
       licenseKey: "LIC-9999-9999-9999-9999",
@@ -921,10 +928,127 @@ describe("adminRoutes", () => {
       },
     });
     expect(licenseFindUnique).toHaveBeenCalledWith({ where: { id: "license-y" } });
-    expect(licenseUpdate).toHaveBeenCalledWith({
-      where: { id: "license-y" },
-      data: { status: "revoked" },
+    expect(licenseUpdate).toHaveBeenCalledTimes(1);
+    expect(licenseUpdate.mock.calls[0][0].where).toEqual({ id: "license-y" });
+    expect(licenseUpdate.mock.calls[0][0].data).toMatchObject({
+      status: "revoked",
+      blockReason: "manual_review",
+      blockedBy: "admin",
+      blockNote: "revoked_by_admin",
     });
+    expect(licenseUpdate.mock.calls[0][0].data.blockedAt).toBeInstanceOf(Date);
+  });
+
+  test("suspends a license with reason and note", async () => {
+    const current = {
+      id: "license-s",
+      licenseKey: "LIC-5555-5555-5555-5555",
+      email: "s@example.com",
+      productCode: "PROD",
+      expiresAt: new Date("2030-01-01T00:00:00.000Z"),
+      status: "active",
+      maxDevices: 1,
+    };
+    const updated = {
+      ...current,
+      status: "suspended",
+      blockReason: "security_risk",
+      blockedAt: new Date("2026-03-14T00:00:00.000Z"),
+      blockedBy: "ops-admin",
+      blockNote: "suspicious activity",
+      unblockedAt: null,
+      unblockedBy: null,
+      unblockedNote: null,
+    };
+    licenseFindUnique.mockResolvedValue(current);
+    licenseUpdate.mockResolvedValue(updated);
+
+    app = await buildApp();
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/admin/licenses/license-s/suspend",
+      headers: { authorization: `Bearer ${issueAdminToken("operator", "admin-ops")}` },
+      payload: {
+        reason: "security_risk",
+        blockedBy: "ops-admin",
+        note: "suspicious activity",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      license: {
+        ...updated,
+        expiresAt: updated.expiresAt.toISOString(),
+        blockedAt: updated.blockedAt.toISOString(),
+      },
+    });
+    expect(licenseUpdate.mock.calls[0][0].data).toMatchObject({
+      status: "suspended",
+      blockReason: "security_risk",
+      blockedBy: "ops-admin",
+      blockNote: "suspicious activity",
+    });
+    expect(licenseUpdate.mock.calls[0][0].data.blockedAt).toBeInstanceOf(Date);
+  });
+
+  test("unsuspends a license and keeps unblocking audit fields", async () => {
+    const current = {
+      id: "license-u",
+      licenseKey: "LIC-6666-6666-6666-6666",
+      email: "u@example.com",
+      productCode: "PROD",
+      expiresAt: new Date("2030-01-01T00:00:00.000Z"),
+      status: "suspended",
+      blockReason: "abuse",
+      blockedAt: new Date("2026-03-14T00:00:00.000Z"),
+      blockedBy: "ops-admin",
+      blockNote: "investigation",
+      maxDevices: 2,
+    };
+    const updated = {
+      ...current,
+      status: "active",
+      blockReason: null,
+      blockedAt: null,
+      blockedBy: null,
+      blockNote: null,
+      unblockedAt: new Date("2026-03-14T01:00:00.000Z"),
+      unblockedBy: "ops-admin-2",
+      unblockedNote: "resolved",
+    };
+    licenseFindUnique.mockResolvedValue(current);
+    licenseUpdate.mockResolvedValue(updated);
+
+    app = await buildApp();
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/admin/licenses/license-u/unsuspend",
+      headers: { authorization: `Bearer ${issueAdminToken("operator", "admin-ops-2")}` },
+      payload: {
+        unblockedBy: "ops-admin-2",
+        note: "resolved",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      license: {
+        ...updated,
+        expiresAt: updated.expiresAt.toISOString(),
+        unblockedAt: updated.unblockedAt.toISOString(),
+      },
+    });
+    expect(licenseUpdate.mock.calls[0][0].data).toMatchObject({
+      status: "active",
+      blockReason: null,
+      blockedAt: null,
+      blockedBy: null,
+      blockNote: null,
+      unblockedBy: "ops-admin-2",
+      unblockedNote: "resolved",
+    });
+    expect(licenseUpdate.mock.calls[0][0].data.unblockedAt).toBeInstanceOf(Date);
   });
 
   test("deletes a license and its devices", async () => {

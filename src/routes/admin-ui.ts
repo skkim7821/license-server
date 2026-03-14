@@ -252,7 +252,8 @@ const adminUiHtml = `<!doctype html>
         "<td>" +
           "<button class='secondary js-license-action' data-action='extend' data-id='" + safeId + "'>+30일</button> " +
           "<button class='secondary js-license-action' data-action='set-status' data-id='" + safeId + "' data-status='active'>active</button> " +
-          "<button class='secondary js-license-action' data-action='set-status' data-id='" + safeId + "' data-status='expired'>expired</button> " +
+          "<button class='secondary js-license-action' data-action='suspend' data-id='" + safeId + "'>suspend</button> " +
+          "<button class='secondary js-license-action' data-action='unsuspend' data-id='" + safeId + "'>unsuspend</button> " +
           "<button class='secondary js-license-action' data-action='set-status' data-id='" + safeId + "' data-status='revoked'>revoked</button> " +
           "<button class='danger js-license-action' data-action='delete' data-id='" + safeId + "'>delete</button>" +
         "</td>" +
@@ -292,6 +293,36 @@ const adminUiHtml = `<!doctype html>
         await refreshLicenses();
       } catch (error) {
         setStatus("상태 변경 실패: " + error.message);
+      }
+    }
+
+    async function suspendLicense(id) {
+      const reason = prompt("suspend reason (abuse/manual_review/security_risk/server_impact/billing_issue/other)", "manual_review");
+      if (!reason) return;
+      const note = prompt("suspend note (optional)", "") || undefined;
+      try {
+        await api("/admin/licenses/" + encodeURIComponent(id) + "/suspend", {
+          method: "PATCH",
+          body: JSON.stringify({ reason, note }),
+        });
+        setStatus("suspend 완료: " + id);
+        await refreshLicenses();
+      } catch (error) {
+        setStatus("suspend 실패: " + error.message);
+      }
+    }
+
+    async function unsuspendLicense(id) {
+      const note = prompt("unsuspend note (optional)", "") || undefined;
+      try {
+        await api("/admin/licenses/" + encodeURIComponent(id) + "/unsuspend", {
+          method: "PATCH",
+          body: JSON.stringify({ note }),
+        });
+        setStatus("unsuspend 완료: " + id);
+        await refreshLicenses();
+      } catch (error) {
+        setStatus("unsuspend 실패: " + error.message);
       }
     }
 
@@ -335,9 +366,17 @@ const adminUiHtml = `<!doctype html>
       }
       if (action === "set-status") {
         const status = button.dataset.status;
-        if (status === "active" || status === "expired" || status === "revoked") {
+        if (status === "active" || status === "revoked") {
           await setLicenseStatus(id, status);
         }
+        return;
+      }
+      if (action === "suspend") {
+        await suspendLicense(id);
+        return;
+      }
+      if (action === "unsuspend") {
+        await unsuspendLicense(id);
       }
     });
   </script>

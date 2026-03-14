@@ -7,7 +7,16 @@ type LicensesPageProps = {
   licenses: LicenseRecord[];
   onCreateLicense: (email: string, productCode: string) => Promise<void>;
   onExtend: (id: string, days: number) => Promise<void>;
-  onSetStatus: (id: string, status: LicenseRecord["status"]) => Promise<void>;
+  onSetStatus: (id: string, status: "active" | "revoked") => Promise<void>;
+  onSuspend: (
+    id: string,
+    payload: {
+      reason: "abuse" | "manual_review" | "security_risk" | "server_impact" | "billing_issue" | "other";
+      blockedBy?: string;
+      note?: string;
+    }
+  ) => Promise<void>;
+  onUnsuspend: (id: string, payload?: { unblockedBy?: string; note?: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 };
 
@@ -17,6 +26,8 @@ export function LicensesPage({
   onCreateLicense,
   onExtend,
   onSetStatus,
+  onSuspend,
+  onUnsuspend,
   onDelete,
 }: LicensesPageProps) {
   const [email, setEmail] = useState("");
@@ -36,6 +47,32 @@ export function LicensesPage({
     }
     await onCreateLicense(normalizedEmail, normalizedProductCode);
     setEmail("");
+  }
+
+  async function suspendLicense(id: string) {
+    const reasonInput = window.prompt(
+      "Suspension reason (abuse|manual_review|security_risk|server_impact|billing_issue|other)",
+      "manual_review"
+    );
+    if (!reasonInput) {
+      return;
+    }
+    const reason = reasonInput.trim() as
+      | "abuse"
+      | "manual_review"
+      | "security_risk"
+      | "server_impact"
+      | "billing_issue"
+      | "other";
+    const note = window.prompt("Suspension note (optional)", "")?.trim();
+    const blockedBy = window.prompt("Blocked by (optional)", "")?.trim();
+    await onSuspend(id, { reason, note, blockedBy });
+  }
+
+  async function unsuspendLicense(id: string) {
+    const note = window.prompt("Unsuspend note (optional)", "")?.trim();
+    const unblockedBy = window.prompt("Unblocked by (optional)", "")?.trim();
+    await onUnsuspend(id, { note, unblockedBy });
   }
 
   return (
@@ -100,7 +137,7 @@ export function LicensesPage({
                 <td>{license.email}</td>
                 <td>{license.productCode}</td>
                 <td>{license.licenseKey}</td>
-                <td>{license.status}</td>
+                <td>{license.blockReason ? `${license.status} (${license.blockReason})` : license.status}</td>
                 <td>{new Date(license.expiresAt).toLocaleString()}</td>
                 <td className="actions">
                   <button type="button" className="btn secondary" onClick={() => void onExtend(license.id, 30)}>
@@ -109,8 +146,11 @@ export function LicensesPage({
                   <button type="button" className="btn secondary" onClick={() => void onSetStatus(license.id, "active")}>
                     Active
                   </button>
-                  <button type="button" className="btn secondary" onClick={() => void onSetStatus(license.id, "expired")}>
-                    Expired
+                  <button type="button" className="btn secondary" onClick={() => void suspendLicense(license.id)}>
+                    Suspend
+                  </button>
+                  <button type="button" className="btn secondary" onClick={() => void unsuspendLicense(license.id)}>
+                    Unsuspend
                   </button>
                   <button type="button" className="btn secondary" onClick={() => void onSetStatus(license.id, "revoked")}>
                     Revoked

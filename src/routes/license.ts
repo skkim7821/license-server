@@ -26,7 +26,23 @@ const verifyLicenseErrorSchema = {
   type: "object",
   properties: {
     valid: { type: "boolean" },
-    reason: { type: "string" },
+    reason: {
+      type: "string",
+      enum: [
+        "missing_fields",
+        "not_found",
+        "expired",
+        "suspended",
+        "revoked",
+        "max_devices_reached",
+      ],
+    },
+    blockReason: {
+      type: "string",
+      enum: ["abuse", "manual_review", "security_risk", "server_impact", "billing_issue", "other"],
+      nullable: true,
+    },
+    blockNote: { type: "string", nullable: true },
   },
 };
 
@@ -141,21 +157,22 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
       }
 
       const now = new Date();
+      if (license.status === "suspended" || license.status === "revoked") {
+        return reply.status(403).send({
+          valid: false,
+          reason: license.status,
+          blockReason: license.blockReason ?? null,
+          blockNote: license.blockNote ?? null,
+        });
+      }
+
       const isLicenseExpired = !isAfter(license.expiresAt, now);
-
-      if (isLicenseExpired) {
-        if (license.status !== "expired") {
-          await prismaInstance.license.update({
-            where: { id: license.id },
-            data: { status: "expired" },
-          });
-        }
-
+      if (isLicenseExpired || license.status === "expired") {
         return reply.status(403).send({ valid: false, reason: "expired" });
       }
 
       if (license.status !== "active") {
-        return reply.status(403).send({ valid: false, reason: license.status });
+        return reply.status(403).send({ valid: false, reason: "revoked" });
       }
 
       const existingDevice = license.devices.find((device) => device.ipAddr === resolvedIpAddr);

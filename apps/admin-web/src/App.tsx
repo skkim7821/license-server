@@ -126,6 +126,18 @@ export function App() {
                     "license_status_updated"
                   )
                 }
+                onSuspend={async (id, payload) =>
+                  withRefresh(
+                    () => adminApi.suspendLicense(token!, id, payload).then(() => undefined),
+                    "license_suspended"
+                  )
+                }
+                onUnsuspend={async (id, payload) =>
+                  withRefresh(
+                    () => adminApi.unsuspendLicense(token!, id, payload).then(() => undefined),
+                    "license_unsuspended"
+                  )
+                }
                 onDelete={async (id) =>
                   withRefresh(() => adminApi.deleteLicense(token!, id).then(() => undefined), "license_deleted")
                 }
