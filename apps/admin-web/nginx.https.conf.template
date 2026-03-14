@@ -7,7 +7,7 @@ server {
   }
 
   location / {
-    return 301 https://$host$request_uri;
+    return 404;
   }
 }
 
@@ -75,7 +75,16 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
-  location / {
+  location ^~ /license-console-k9/ {
+    rewrite ^/license-console-k9/(.*)$ /$1 break;
     try_files $uri /index.html;
+  }
+
+  location = /license-console-k9 {
+    try_files /index.html =404;
+  }
+
+  location / {
+    return 404;
   }
 }
