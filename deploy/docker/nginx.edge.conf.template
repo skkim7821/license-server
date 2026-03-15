@@ -2,6 +2,12 @@ server {
   listen 80;
   server_name ${SERVER_NAME};
 
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok";
+  }
+
   location /.well-known/acme-challenge/ {
     root /var/www/certbot;
   }
@@ -17,6 +23,12 @@ server {
 
   ssl_certificate ${SSL_CERT_PATH};
   ssl_certificate_key ${SSL_KEY_PATH};
+
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok";
+  }
 
   location /admin/ {
     proxy_pass http://license-server:3000;

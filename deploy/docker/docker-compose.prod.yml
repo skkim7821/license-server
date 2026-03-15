@@ -43,7 +43,7 @@ services:
       license-server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -68,7 +68,7 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/lib/letsencrypt:/var/lib/letsencrypt:ro
     healthcheck:
-      test: ["CMD-SHELL", "if [ \"${ENABLE_HTTPS:-true}\" = \"1\" ] || [ \"${ENABLE_HTTPS:-true}\" = \"true\" ] || [ \"${ENABLE_HTTPS:-true}\" = \"yes\" ]; then wget -qO- --no-check-certificate https://127.0.0.1/health >/dev/null 2>&1; else wget -qO- http://127.0.0.1/health >/dev/null 2>&1; fi || exit 1"]
+      test: ["CMD-SHELL", "if [ \"${ENABLE_HTTPS:-true}\" = \"1\" ] || [ \"${ENABLE_HTTPS:-true}\" = \"true\" ] || [ \"${ENABLE_HTTPS:-true}\" = \"yes\" ]; then wget -qO- --no-check-certificate https://127.0.0.1/healthz >/dev/null 2>&1; else wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1; fi || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
