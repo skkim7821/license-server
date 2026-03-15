@@ -64,7 +64,7 @@ echo "[deploy] checking remote ssh connectivity"
 retry 5 5 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "echo connected: \$(whoami)@\$(hostname)"
 
 echo "[deploy] ensure deploy directory"
-retry 5 5 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy'"
+retry 5 5 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}/deploy/docker'"
 
 echo "[deploy] upload compose and env files"
 retry 5 5 scp ${SSH_COMMON_OPTS} -P "${SSH_PORT}" \
