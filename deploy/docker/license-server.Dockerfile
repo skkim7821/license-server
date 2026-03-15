@@ -16,8 +16,8 @@ RUN pnpm install --frozen-lockfile --filter license-server... --prod=false
 
 COPY apps/license-server ./apps/license-server
 WORKDIR /app/apps/license-server
-RUN pnpm build
 RUN pnpm prisma generate
+RUN pnpm build
 
 EXPOSE 3000
 
