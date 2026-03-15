@@ -150,6 +150,12 @@ if [ "${seeded}" -ne 1 ]; then
   exit 1
 fi
 
-timeout 240 docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --wait --wait-timeout 180 admin-web
+if ! timeout 240 docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --wait --wait-timeout 180 admin-web; then
+  echo "admin-web startup failed"
+  docker compose "${COMPOSE_ARGS[@]}" ps || true
+  docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 admin-web || true
+  docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 license-server || true
+  exit 1
+fi
 docker compose "${COMPOSE_ARGS[@]}" ps
 EOF
