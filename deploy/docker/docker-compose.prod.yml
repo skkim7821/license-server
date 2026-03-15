@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -41,16 +41,21 @@ services:
     restart: unless-stopped
     depends_on:
       license-server:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   edge-proxy:
     image: nginx:1.27-alpine
     restart: unless-stopped
     depends_on:
       license-server:
-        condition: service_started
+        condition: service_healthy
       admin-web:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
@@ -59,9 +64,14 @@ services:
       SSL_CERT_PATH: ${SSL_CERT_PATH:-/etc/letsencrypt/live/lc.skkim.dev/fullchain.pem}
       SSL_KEY_PATH: ${SSL_KEY_PATH:-/etc/letsencrypt/live/lc.skkim.dev/privkey.pem}
     volumes:
-      - ./deploy/docker/nginx.edge.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx.edge.conf.template:/etc/nginx/templates/default.conf.template:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/lib/letsencrypt:/var/lib/letsencrypt:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
 volumes:
   postgres_data:
