@@ -114,6 +114,24 @@ docker rm -f license-server license-admin-web license-server-admin-web >/dev/nul
 timeout 300 docker compose "${COMPOSE_ARGS[@]}" pull
 timeout 300 docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres license-server
 
+schema_ready=0
+for i in $(seq 1 15); do
+  echo "[deploy] running migrate:deploy (${i}/15)"
+  if timeout 45 docker compose "${COMPOSE_ARGS[@]}" exec -T license-server pnpm prisma migrate deploy; then
+    schema_ready=1
+    echo "[deploy] migrate:deploy completed"
+    break
+  fi
+  sleep 2
+done
+
+if [ "${schema_ready}" -ne 1 ]; then
+  echo "schema migration failed after retries"
+  docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 license-server || true
+  docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 postgres || true
+  exit 1
+fi
+
 seeded=0
 for i in $(seq 1 15); do
   echo "[deploy] running seed:prod (${i}/15)"
