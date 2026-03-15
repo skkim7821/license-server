@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16
-    container_name: license-server-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: license_server
@@ -21,7 +20,6 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/license-server.Dockerfile
-    container_name: license-server
     restart: unless-stopped
     depends_on:
       postgres:
@@ -46,7 +44,6 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/admin-web.Dockerfile
-    container_name: license-admin-web
     restart: unless-stopped
     depends_on:
       license-server:

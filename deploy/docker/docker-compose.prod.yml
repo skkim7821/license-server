@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16
-    container_name: license-server-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: license_server
@@ -14,7 +13,6 @@ services:
 
   license-server:
     image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server:${BACKEND_IMAGE_TAG:-main}
-    container_name: license-server
     restart: unless-stopped
     depends_on:
       postgres:
@@ -29,7 +27,6 @@ services:
 
   admin-web:
     image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server-admin-web:${ADMIN_WEB_IMAGE_TAG:-main}
-    container_name: license-server-admin-web
     restart: unless-stopped
     depends_on:
       license-server:
