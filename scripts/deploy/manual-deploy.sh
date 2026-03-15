@@ -104,38 +104,78 @@ dump_logs() {
   "${COMPOSE[@]}" logs --tail=120 "${service}" || true
 }
 
+run_step() {
+  local label="$1"
+  local timeout_seconds="$2"
+  shift 2
+
+  local started_at="${SECONDS}"
+  local status=0
+  local cmd_pid
+  local heartbeat_pid
+
+  echo "[deploy] ${label}"
+
+  timeout --foreground "${timeout_seconds}" "$@" &
+  cmd_pid=$!
+
+  (
+    while kill -0 "${cmd_pid}" 2>/dev/null; do
+      sleep 20
+      kill -0 "${cmd_pid}" 2>/dev/null || exit 0
+      echo "[deploy] ${label} still running... ($((SECONDS - started_at))s elapsed)"
+    done
+  ) &
+  heartbeat_pid=$!
+
+  set +e
+  wait "${cmd_pid}"
+  status=$?
+  set -e
+
+  kill "${heartbeat_pid}" 2>/dev/null || true
+  wait "${heartbeat_pid}" 2>/dev/null || true
+
+  if [ "${status}" -eq 0 ]; then
+    echo "[deploy] ${label} done ($((SECONDS - started_at))s total)"
+    return 0
+  fi
+
+  if [ "${status}" -eq 124 ]; then
+    echo "[deploy] ${label} timed out after ${timeout_seconds}s"
+  else
+    echo "[deploy] ${label} failed with exit code ${status}"
+  fi
+
+  return "${status}"
+}
+
 echo "[deploy] ghcr login"
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
-echo "[deploy] pull images (quiet)"
-timeout "${PULL_TIMEOUT}" "${COMPOSE[@]}" pull --quiet
-echo "[deploy] pull done"
+if ! run_step "pull images" "${PULL_TIMEOUT}" "${COMPOSE[@]}" pull; then
+  "${COMPOSE[@]}" config >/dev/null || true
+  exit 1
+fi
 
-echo "[deploy] start postgres"
-timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres
-echo "[deploy] postgres ready"
+if ! run_step "start postgres" "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres; then
+  dump_logs postgres
+  exit 1
+fi
 
-echo "[deploy] migrate"
-if ! timeout "${MIGRATE_TIMEOUT}" "${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm prisma migrate deploy; then
-  echo "[deploy] migrate failed or timed out (${MIGRATE_TIMEOUT}s)"
+if ! run_step "migrate" "${MIGRATE_TIMEOUT}" "${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm prisma migrate deploy; then
   dump_logs postgres
   dump_logs license-server
   exit 1
 fi
-echo "[deploy] migrate done"
 
-echo "[deploy] seed"
-if ! timeout "${SEED_TIMEOUT}" "${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm run seed:prod; then
-  echo "[deploy] seed failed or timed out (${SEED_TIMEOUT}s)"
+if ! run_step "seed" "${SEED_TIMEOUT}" "${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm run seed:prod; then
   dump_logs postgres
   dump_logs license-server
   exit 1
 fi
-echo "[deploy] seed done"
 
-echo "[deploy] start services"
-if ! timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 license-server admin-web edge-proxy; then
-  echo "[deploy] service startup failed or timed out (${WAIT_TIMEOUT}s)"
+if ! run_step "start services" "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 license-server admin-web edge-proxy; then
   "${COMPOSE[@]}" ps || true
   dump_logs edge-proxy
   dump_logs admin-web
