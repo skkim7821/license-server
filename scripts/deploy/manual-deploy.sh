@@ -31,6 +31,8 @@ SSL_KEY_PATH="${SSL_KEY_PATH:-/etc/letsencrypt/live/lc.skkim.dev/privkey.pem}"
 
 PULL_TIMEOUT="${PULL_TIMEOUT:-600}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-240}"
+MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT:-180}"
+SEED_TIMEOUT="${SEED_TIMEOUT:-180}"
 
 SSH_COMMON_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
 COMPOSE_SRC="deploy/docker/docker-compose.prod.yml"
@@ -75,6 +77,8 @@ echo "[deploy] run remote deploy"
 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
   PULL_TIMEOUT="${PULL_TIMEOUT}" \
   WAIT_TIMEOUT="${WAIT_TIMEOUT}" \
+  MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT}" \
+  SEED_TIMEOUT="${SEED_TIMEOUT}" \
   SERVER_NAME="${SERVER_NAME}" \
   GHCR_USERNAME="${GHCR_USERNAME}" \
   GHCR_TOKEN="${GHCR_TOKEN}" \
@@ -94,23 +98,50 @@ esac
 cd "${DEPLOY_PATH}"
 COMPOSE=(docker compose --env-file deploy/.env.prod -f deploy/docker/docker-compose.prod.yml)
 
+dump_logs() {
+  local service="$1"
+  echo "[deploy] ===== ${service} logs ====="
+  "${COMPOSE[@]}" logs --tail=120 "${service}" || true
+}
+
 echo "[deploy] ghcr login"
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
 echo "[deploy] pull images (quiet)"
 timeout "${PULL_TIMEOUT}" "${COMPOSE[@]}" pull --quiet
+echo "[deploy] pull done"
 
 echo "[deploy] start postgres"
 timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres
+echo "[deploy] postgres ready"
 
 echo "[deploy] migrate"
-"${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm prisma migrate deploy
+if ! timeout "${MIGRATE_TIMEOUT}" "${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm prisma migrate deploy; then
+  echo "[deploy] migrate failed or timed out (${MIGRATE_TIMEOUT}s)"
+  dump_logs postgres
+  dump_logs license-server
+  exit 1
+fi
+echo "[deploy] migrate done"
 
 echo "[deploy] seed"
-"${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm run seed:prod
+if ! timeout "${SEED_TIMEOUT}" "${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm run seed:prod; then
+  echo "[deploy] seed failed or timed out (${SEED_TIMEOUT}s)"
+  dump_logs postgres
+  dump_logs license-server
+  exit 1
+fi
+echo "[deploy] seed done"
 
 echo "[deploy] start services"
-timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 license-server admin-web edge-proxy
+if ! timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 license-server admin-web edge-proxy; then
+  echo "[deploy] service startup failed or timed out (${WAIT_TIMEOUT}s)"
+  "${COMPOSE[@]}" ps || true
+  dump_logs edge-proxy
+  dump_logs admin-web
+  dump_logs license-server
+  exit 1
+fi
 
 "${COMPOSE[@]}" ps
 echo "[deploy] ready: https://${SERVER_NAME}/license-console-k9/"
