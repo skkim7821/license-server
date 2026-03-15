@@ -94,8 +94,10 @@ curl -fsS http://127.0.0.1/health
 ## GitHub Actions 환경 변수 정리
 설정 위치: GitHub 저장소 `Settings > Secrets and variables > Actions`
 
-### 1) `publish-ghcr.yml` (태그 푸시 시 이미지 빌드/푸시)
-- 트리거: `git push --tags` (`v*`)
+### 1) `publish-ghcr.yml` (main/태그 이미지 빌드·푸시)
+- 트리거:
+  - `main` 브랜치 푸시: `main`, `sha-...` 태그 이미지 발행(테스트용)
+  - `v*` 태그 푸시: 릴리즈 태그 이미지 발행
 - 별도 커스텀 환경변수는 필요 없습니다.
 - 인증은 `secrets.GITHUB_TOKEN`을 사용합니다.
 
@@ -105,9 +107,13 @@ curl -fsS http://127.0.0.1/health
 
 | Input | 예시 | 설명 |
 |---|---|---|
-| `backend_tag` | `v0.1.8` | 백엔드 이미지 태그 (`ghcr.io/<namespace>/license-server:<tag>`) |
-| `admin_tag` | `v0.1.8` | 프론트(admin-web) 이미지 태그 (`ghcr.io/<namespace>/license-server-admin-web:<tag>`) |
+| `backend_tag` | `main` | 백엔드 이미지 태그 (`ghcr.io/<namespace>/license-server:<tag>`) |
+| `admin_tag` | `main` | 프론트(admin-web) 이미지 태그 (`ghcr.io/<namespace>/license-server-admin-web:<tag>`) |
 | `confirm` | `DEPLOY_NOW` | 안전장치 문자열. 정확히 일치해야 배포 실행 |
+
+메모:
+- `backend_tag`, `admin_tag` 미입력 시 기본값은 `main`입니다.
+- 추천 흐름: `main`으로 서버에서 먼저 검증 → 안정화 후 `vX.Y.Z` 태그 발행.
 
 ### 3) `deploy-manual.yml`가 읽는 Secrets/Variables (전체)
 아래 키가 실제 배포 스크립트(`scripts/deploy/manual-deploy.sh`)에 전달됩니다.
@@ -169,6 +175,21 @@ pnpm docker:up
 - 운영 배포는 `deploy/docker/docker-compose.yml`을 사용합니다.
 - Frontend는 Nginx reverse proxy로 `/admin`, `/license`, `/docs`, `/health`를 backend(`license-server`)로 전달합니다.
 - 따라서 Frontend 코드의 상대경로 API 호출(`/admin/...`)을 그대로 사용합니다.
+
+## 로컬 SSL 테스트 (Mac)
+`mkcert`로 로컬 인증서를 만든 뒤 SSL 오버라이드 컴포즈를 사용합니다.
+
+```bash
+brew install mkcert nss
+mkcert -install
+mkdir -p deploy/certs
+mkcert -cert-file deploy/certs/localhost.pem -key-file deploy/certs/localhost-key.pem localhost 127.0.0.1 ::1
+docker compose -f deploy/docker/docker-compose.prod.yml -f deploy/docker/docker-compose.ssl-local.yml up -d
+```
+
+접속 확인:
+- `https://localhost/health`
+- `https://localhost/license-console-k9/`
 
 ## 서버 운영 라이프사이클 커맨드
 아래 명령은 현재 구성(포트 80, PostgreSQL 컨테이너, Docker Compose) 기준입니다.

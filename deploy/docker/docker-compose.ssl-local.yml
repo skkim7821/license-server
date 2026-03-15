@@ -1,0 +1,8 @@
+services:
+  edge-proxy:
+    environment:
+      SERVER_NAME: localhost
+      SSL_CERT_PATH: /certs/localhost.pem
+      SSL_KEY_PATH: /certs/localhost-key.pem
+    volumes:
+      - ./deploy/certs:/certs:ro

@@ -2,8 +2,11 @@ name: Publish Docker image to GHCR
 
 on:
   push:
+    branches:
+      - "main"
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,8 +36,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
+            type=raw,value=main,enable={{is_default_branch}}
             type=ref,event=tag
-            type=sha
+            type=sha,prefix=sha-
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -42,7 +46,9 @@ jobs:
           context: .
           file: ./deploy/docker/license-server.Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ github.event_name == 'workflow_dispatch' && format('ghcr.io/{0}:main', github.repository) || '' }}
+            ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Extract admin-web Docker metadata
@@ -51,8 +57,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}-admin-web
           tags: |
+            type=raw,value=main,enable={{is_default_branch}}
             type=ref,event=tag
-            type=sha
+            type=sha,prefix=sha-
 
       - name: Build and push admin-web image
         uses: docker/build-push-action@v6
@@ -60,5 +67,7 @@ jobs:
           context: .
           file: ./deploy/docker/admin-web.Dockerfile
           push: true
-          tags: ${{ steps.meta_admin.outputs.tags }}
+          tags: |
+            ${{ github.event_name == 'workflow_dispatch' && format('ghcr.io/{0}-admin-web:main', github.repository) || '' }}
+            ${{ steps.meta_admin.outputs.tags }}
           labels: ${{ steps.meta_admin.outputs.labels }}

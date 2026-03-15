@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       backend_tag:
-        description: "Backend image tag (vX.Y.Z)"
-        required: true
+        description: "Backend image tag (default: main)"
+        required: false
+        default: "main"
       admin_tag:
-        description: "Admin-web image tag (vX.Y.Z)"
-        required: true
+        description: "Admin-web image tag (default: main)"
+        required: false
+        default: "main"
       confirm:
         description: "Type DEPLOY_NOW to continue"
         required: true
@@ -36,7 +38,7 @@ jobs:
           ADMIN_TAG: ${{ github.event.inputs.admin_tag }}
         run: |
           set -euo pipefail
-          tag_regex='^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'
+          tag_regex='^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'
           if ! printf '%s' "${BACKEND_TAG}" | grep -Eq "${tag_regex}"; then
             echo "Invalid backend_tag: ${BACKEND_TAG}"
             exit 1

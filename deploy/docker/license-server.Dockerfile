@@ -12,12 +12,13 @@ RUN apt-get update \
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps/license-server/package.json ./apps/license-server/package.json
-RUN pnpm install --frozen-lockfile --filter license-server...
+RUN pnpm install --frozen-lockfile --filter license-server... --prod=false
 
 COPY apps/license-server ./apps/license-server
 WORKDIR /app/apps/license-server
+RUN pnpm build
 RUN pnpm prisma generate
 
 EXPOSE 3000
 
-CMD ["pnpm", "start:prod"]
+CMD ["pnpm", "start"]
