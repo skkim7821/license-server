@@ -19,8 +19,8 @@ services:
 
   license-server:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/license-server.Dockerfile
     container_name: license-server
     restart: unless-stopped
     depends_on:
@@ -44,8 +44,8 @@ services:
 
   admin-web:
     build:
-      context: .
-      dockerfile: apps/admin-web/Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/admin-web.Dockerfile
     container_name: license-admin-web
     restart: unless-stopped
     depends_on:

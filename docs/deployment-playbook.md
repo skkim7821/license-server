@@ -55,8 +55,8 @@
 - `confirm=DEPLOY_NOW` 입력 후 실행
 
 3. 배포 후 확인
-- `docker compose -f deploy/docker-compose.prod.yml ps`
-- `docker compose -f deploy/docker-compose.prod.yml logs --tail=100 license-server`
+- `docker compose -f deploy/docker/docker-compose.prod.yml ps`
+- `docker compose -f deploy/docker/docker-compose.prod.yml logs --tail=100 license-server`
 - `curl -fsS http://127.0.0.1/health`
 - 도메인 접속 및 관리자 로그인 확인
 

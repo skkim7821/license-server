@@ -6,12 +6,19 @@ cd "${ROOT_DIR}"
 
 BACKEND_PORT="${PORT:-3000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5174}"
+FRONTEND_BASE_PATH="/"
 PORT_SCAN_MAX="${PORT_SCAN_MAX:-20}"
 BACKEND_PID=""
 FRONTEND_PID=""
 
 is_port_available() {
   local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    if lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+      return 1
+    fi
+  fi
+
   node -e '
     const net = require("node:net");
     const port = Number(process.argv[1]);
@@ -59,11 +66,11 @@ trap cleanup EXIT INT TERM
 BACKEND_PORT="$(find_available_port "${BACKEND_PORT}" "backend")"
 FRONTEND_PORT="$(find_available_port "${FRONTEND_PORT}" "frontend")"
 
-echo "[local-dev] bootstrap database (no seed)"
+echo "[local-dev] bootstrap database (admin seed only)"
 if [ "${LOCAL_DEV_SKIP_BOOTSTRAP:-0}" = "1" ]; then
   echo "[local-dev] skip bootstrap (LOCAL_DEV_SKIP_BOOTSTRAP=1)"
 else
-  if ! pnpm run db:bootstrap:no-seed; then
+  if ! pnpm run db:bootstrap:prod; then
     echo "[local-dev] bootstrap failed. Check PostgreSQL and DATABASE_URL (ex: localhost:5532)." >&2
     exit 1
   fi
@@ -121,7 +128,7 @@ start_frontend() {
   while [ "${tries}" -lt "${PORT_SCAN_MAX}" ]; do
     echo "[local-dev] start frontend on :${port}"
     VITE_BACKEND_URL="http://localhost:${BACKEND_PORT}" \
-    PORT="${port}" pnpm run frontend:dev -- --host 0.0.0.0 --port "${port}" --strictPort &
+    pnpm --filter admin-web run dev --host 0.0.0.0 --port "${port}" --strictPort &
     FRONTEND_PID=$!
 
     sleep 2
@@ -144,7 +151,7 @@ start_frontend "${FRONTEND_PORT}"
 
 echo "[local-dev] ready"
 echo "  - backend : http://127.0.0.1:${BACKEND_PORT}"
-echo "  - frontend: http://127.0.0.1:${FRONTEND_PORT}"
+echo "  - frontend: http://127.0.0.1:${FRONTEND_PORT}${FRONTEND_BASE_PATH}"
 echo "[local-dev] press Ctrl+C to stop"
 
 while kill -0 "${BACKEND_PID}" 2>/dev/null && kill -0 "${FRONTEND_PID}" 2>/dev/null; do

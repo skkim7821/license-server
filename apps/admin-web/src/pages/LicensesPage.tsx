@@ -7,6 +7,7 @@ type LicensesPageProps = {
   licenses: LicenseRecord[];
   onCreateLicense: (email: string, productCode: string) => Promise<void>;
   onExtend: (id: string, days: number) => Promise<void>;
+  onUpdateMaxDevices: (id: string, maxDevices: number) => Promise<void>;
   onSetStatus: (id: string, status: "active" | "revoked") => Promise<void>;
   onSuspend: (
     id: string,
@@ -25,6 +26,7 @@ export function LicensesPage({
   licenses,
   onCreateLicense,
   onExtend,
+  onUpdateMaxDevices,
   onSetStatus,
   onSuspend,
   onUnsuspend,
@@ -73,6 +75,21 @@ export function LicensesPage({
     const note = window.prompt("Unsuspend note (optional)", "")?.trim();
     const unblockedBy = window.prompt("Unblocked by (optional)", "")?.trim();
     await onUnsuspend(id, { note, unblockedBy });
+  }
+
+  async function updateMaxDevices(id: string, currentMaxDevices: number) {
+    const nextMaxDevicesRaw = window.prompt("New max devices", String(currentMaxDevices))?.trim();
+    if (!nextMaxDevicesRaw) {
+      return;
+    }
+
+    const nextMaxDevices = Number(nextMaxDevicesRaw);
+    if (!Number.isInteger(nextMaxDevices) || nextMaxDevices < 1) {
+      window.alert("maxDevices must be an integer >= 1");
+      return;
+    }
+
+    await onUpdateMaxDevices(id, nextMaxDevices);
   }
 
   return (
@@ -128,6 +145,8 @@ export function LicensesPage({
               <th>License Key</th>
               <th>Status</th>
               <th>Expires</th>
+              <th>Devices</th>
+              <th>Device IPs</th>
               <th />
             </tr>
           </thead>
@@ -139,9 +158,18 @@ export function LicensesPage({
                 <td>{license.licenseKey}</td>
                 <td>{license.blockReason ? `${license.status} (${license.blockReason})` : license.status}</td>
                 <td>{new Date(license.expiresAt).toLocaleString()}</td>
+                <td>{`${license.deviceCount ?? 0}/${license.maxDevices}`}</td>
+                <td>{license.deviceIps?.length ? license.deviceIps.join(", ") : "-"}</td>
                 <td className="actions">
                   <button type="button" className="btn secondary" onClick={() => void onExtend(license.id, 30)}>
                     +30d
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => void updateMaxDevices(license.id, license.maxDevices)}
+                  >
+                    Devices
                   </button>
                   <button type="button" className="btn secondary" onClick={() => void onSetStatus(license.id, "active")}>
                     Active

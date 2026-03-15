@@ -334,6 +334,67 @@ describe("licenseRoutes /verify", () => {
     ]);
   });
 
+  test("prefers forwarded ip when provided ip is loopback", async () => {
+    const license: LicenseRecord = {
+      id: "license-5b",
+      licenseKey: "LIC-AAAA-BBBB-CCCC-EEEE",
+      email: "owner@example.com",
+      productCode: "PROD",
+      expiresAt: addMilliseconds(new Date(), 1_000_000),
+      status: "active",
+      maxDevices: 3,
+      devices: [],
+    };
+    const mock = createMockPrisma(license);
+    app = await buildApp(mock.stub);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/license/verify",
+      headers: { "x-forwarded-for": "14.33.25.123, 10.0.0.1" },
+      payload: {
+        licenseKey: license.licenseKey,
+        ipAddr: "127.0.0.1",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mock.createCalls).toEqual([
+      { licenseId: "license-5b", ipAddr: "14.33.25.123" },
+    ]);
+  });
+
+  test("does not register loopback as a device", async () => {
+    const license: LicenseRecord = {
+      id: "license-5c",
+      licenseKey: "LIC-AAAA-BBBB-CCCC-FFFF",
+      email: "owner@example.com",
+      productCode: "PROD",
+      expiresAt: addMilliseconds(new Date(), 1_000_000),
+      status: "active",
+      maxDevices: 1,
+      devices: [],
+    };
+    const mock = createMockPrisma(license);
+    app = await buildApp(mock.stub);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/license/verify",
+      payload: {
+        licenseKey: license.licenseKey,
+        ipAddr: "127.0.0.1",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      valid: true,
+      remainingDevices: 1,
+    });
+    expect(mock.createCalls).toHaveLength(0);
+  });
+
   test("accepts existing devices without extra creation", async () => {
     const license: LicenseRecord = {
       id: "license-2",

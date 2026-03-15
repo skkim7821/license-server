@@ -17,7 +17,7 @@
 - [x] 최종안 선택 후 문서에 고정
 
 ## 2) Frontend 컨테이너화
-- [x] `apps/admin-web/Dockerfile` 생성 (multi-stage build)
+- [x] `deploy/docker/admin-web.Dockerfile` 생성 (multi-stage build)
 - [x] build stage에서 `pnpm --filter admin-web build` 수행
 - [x] runtime stage에서 정적 파일 서빙 설정(Nginx 또는 node static)
 - [x] 환경별 API endpoint 주입 방식 정의

@@ -141,12 +141,25 @@ const licenseResponseSchema = {
   },
 };
 
+const licenseListItemSchema = {
+  ...licenseResponseSchema.properties.license,
+  properties: {
+    ...licenseResponseSchema.properties.license.properties,
+    deviceCount: { type: "integer", minimum: 0 },
+    deviceIps: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+  required: [...licenseResponseSchema.properties.license.required, "deviceCount", "deviceIps"],
+};
+
 const licensesListResponseSchema = {
   type: "object",
   properties: {
     licenses: {
       type: "array",
-      items: licenseResponseSchema.properties.license,
+      items: licenseListItemSchema,
     },
   },
   required: ["licenses"],
@@ -224,6 +237,14 @@ const extendLicensePayloadSchema = {
   required: ["days"],
   properties: {
     days: { type: "integer", minimum: 1 },
+  },
+};
+
+const updateLicenseMaxDevicesPayloadSchema = {
+  type: "object",
+  required: ["maxDevices"],
+  properties: {
+    maxDevices: { type: "integer", minimum: 1 },
   },
 };
 
@@ -350,6 +371,10 @@ type ExtendLicenseBody = {
   days: number;
 };
 
+type UpdateLicenseMaxDevicesBody = {
+  maxDevices: number;
+};
+
 type ChangeLicenseStatusBody = {
   status: "active" | "revoked";
 };
@@ -447,6 +472,39 @@ function toApiLicenseStatus(license: { status: string; expiresAt: Date }): Licen
   }
 
   return "active";
+}
+
+function normalizeAddress(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === "::ffff:127.0.0.1" || lowered === "localhost") {
+    return "127.0.0.1";
+  }
+
+  return trimmed;
+}
+
+function isLoopbackAddress(value: string) {
+  return value === "127.0.0.1" || value === "::1";
+}
+
+function countActiveDevices(devices: Array<{ ipAddr: string }>) {
+  return devices.filter((device) => {
+    const normalized = normalizeAddress(device.ipAddr);
+    return normalized.length > 0 && !isLoopbackAddress(normalized);
+  }).length;
+}
+
+function getActiveDeviceIps(devices: Array<{ ipAddr: string }>) {
+  const activeDeviceIps = devices
+    .map((device) => normalizeAddress(device.ipAddr))
+    .filter((ipAddr) => ipAddr.length > 0 && !isLoopbackAddress(ipAddr));
+
+  return Array.from(new Set(activeDeviceIps));
 }
 
 function toLicenseResponse(
@@ -1021,10 +1079,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
           unblockedBy: true,
           unblockedNote: true,
           maxDevices: true,
+          devices: {
+            select: {
+              ipAddr: true,
+            },
+          },
         },
       });
 
-      return reply.send({ licenses: licenses.map((license: (typeof licenses)[number]) => toLicenseResponse(license)) });
+      return reply.send({
+        licenses: licenses.map((license: (typeof licenses)[number]) => ({
+          ...toLicenseResponse(license),
+          deviceCount: countActiveDevices(license.devices),
+          deviceIps: getActiveDeviceIps(license.devices),
+        })),
+      });
     }
   );
 
@@ -1159,6 +1228,46 @@ export async function adminRoutes(fastify: FastifyInstance) {
         data: {
           expiresAt: extendedExpiresAt,
           ...(shouldResetLegacyExpired ? { status: "active" } : {}),
+        },
+      });
+
+      return reply.send({ license: toLicenseResponse(updated) });
+    }
+  );
+
+  fastify.patch(
+    "/licenses/:id/max-devices",
+    {
+      schema: {
+        summary: "Update license max devices",
+        description: "Changes max devices limit of an existing license.",
+        tags: ["admin"],
+        params: licenseIdParamsSchema,
+        body: updateLicenseMaxDevicesPayloadSchema,
+        response: {
+          200: licenseResponseSchema,
+          400: productErrorSchema,
+          401: productErrorSchema,
+          404: productErrorSchema,
+        },
+        security: [{ bearerAuth: [] }],
+      },
+      attachValidation: true,
+      preHandler: requireAdmin,
+    },
+    async (request, reply) => {
+      const { id } = request.params as LicenseIdParams;
+      const { maxDevices } = request.body as UpdateLicenseMaxDevicesBody;
+
+      const license = await prisma.license.findUnique({ where: { id } });
+      if (!license) {
+        return reply.status(404).send({ error: "License not found" });
+      }
+
+      const updated = await prisma.license.update({
+        where: { id },
+        data: {
+          maxDevices: Number(maxDevices),
         },
       });
 

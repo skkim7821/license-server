@@ -813,6 +813,14 @@ describe("adminRoutes", () => {
         expiresAt: "2043-01-01T00:00:00.000Z",
         status: "active",
         maxDevices: 2,
+        blockReason: null,
+        blockedAt: null,
+        blockedBy: null,
+        blockNote: null,
+        unblockedAt: null,
+        unblockedBy: null,
+        unblockedNote: null,
+        devices: [{ ipAddr: "127.0.0.1" }, { ipAddr: "14.33.25.123" }],
       },
       {
         id: "license-b",
@@ -822,6 +830,14 @@ describe("adminRoutes", () => {
         expiresAt: "2043-01-02T00:00:00.000Z",
         status: "revoked",
         maxDevices: 1,
+        blockReason: null,
+        blockedAt: null,
+        blockedBy: null,
+        blockNote: null,
+        unblockedAt: null,
+        unblockedBy: null,
+        unblockedNote: null,
+        devices: [],
       },
     ];
     licenseFindMany.mockResolvedValue(licenses);
@@ -834,7 +850,46 @@ describe("adminRoutes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ licenses });
+    expect(response.json()).toEqual({
+      licenses: [
+        {
+          id: "license-a",
+          licenseKey: "LIC-AAAA-BBBB-CCCC-DDDD",
+          email: "a@example.com",
+          productCode: "PROD",
+          expiresAt: "2043-01-01T00:00:00.000Z",
+          status: "active",
+          maxDevices: 2,
+          blockReason: null,
+          blockedAt: null,
+          blockedBy: null,
+          blockNote: null,
+          unblockedAt: null,
+          unblockedBy: null,
+          unblockedNote: null,
+          deviceCount: 1,
+          deviceIps: ["14.33.25.123"],
+        },
+        {
+          id: "license-b",
+          licenseKey: "LIC-EEEE-FFFF-GGGG-HHHH",
+          email: "b@example.com",
+          productCode: "PROD",
+          expiresAt: "2043-01-02T00:00:00.000Z",
+          status: "revoked",
+          maxDevices: 1,
+          blockReason: null,
+          blockedAt: null,
+          blockedBy: null,
+          blockNote: null,
+          unblockedAt: null,
+          unblockedBy: null,
+          unblockedNote: null,
+          deviceCount: 0,
+          deviceIps: [],
+        },
+      ],
+    });
     expect(licenseFindMany).toHaveBeenCalledWith({
       orderBy: { email: "asc" },
       select: {
@@ -852,6 +907,11 @@ describe("adminRoutes", () => {
         unblockedBy: true,
         unblockedNote: true,
         maxDevices: true,
+        devices: {
+          select: {
+            ipAddr: true,
+          },
+        },
       },
     });
   });
@@ -896,6 +956,42 @@ describe("adminRoutes", () => {
       data: { status: "active" },
     });
     expect(licenseUpdate.mock.calls[0][0].data.expiresAt).toBeInstanceOf(Date);
+  });
+
+  test("updates max devices for an existing license", async () => {
+    const current = {
+      id: "license-m",
+      licenseKey: "LIC-1234-5678-9999-0000",
+      email: "m@example.com",
+      productCode: "PROD",
+      expiresAt: new Date("2030-01-01T00:00:00.000Z"),
+      status: "active",
+      maxDevices: 2,
+    };
+    const updated = { ...current, maxDevices: 5 };
+    licenseFindUnique.mockResolvedValue(current);
+    licenseUpdate.mockResolvedValue(updated);
+
+    app = await buildApp();
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/admin/licenses/license-m/max-devices",
+      headers: { authorization: `Bearer ${issueAdminToken("operator", "admin-ops")}` },
+      payload: { maxDevices: 5 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      license: {
+        ...updated,
+        expiresAt: updated.expiresAt.toISOString(),
+      },
+    });
+    expect(licenseFindUnique).toHaveBeenCalledWith({ where: { id: "license-m" } });
+    expect(licenseUpdate).toHaveBeenCalledWith({
+      where: { id: "license-m" },
+      data: { maxDevices: 5 },
+    });
   });
 
   test("changes a license status to revoked", async () => {

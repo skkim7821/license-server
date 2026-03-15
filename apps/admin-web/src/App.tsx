@@ -120,6 +120,12 @@ export function App() {
                 onExtend={async (id, days) =>
                   withRefresh(() => adminApi.extendLicense(token!, id, days).then(() => undefined), "license_extended")
                 }
+                onUpdateMaxDevices={async (id, maxDevices) =>
+                  withRefresh(
+                    () => adminApi.updateLicenseMaxDevices(token!, id, maxDevices).then(() => undefined),
+                    "license_max_devices_updated"
+                  )
+                }
                 onSetStatus={async (id, status) =>
                   withRefresh(
                     () => adminApi.setLicenseStatus(token!, id, status).then(() => undefined),

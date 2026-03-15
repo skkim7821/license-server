@@ -1,0 +1,48 @@
+{
+  "name": "license-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "ensure-tmp": "node -e \"require('fs').mkdirSync('./tmp', { recursive: true });\"",
+    "dev": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp NODE_ENV=development tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/src/server.js",
+    "start:prod": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp NODE_ENV=production tsx src/server.ts",
+    "test": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp vitest run src/routes/*.test.ts",
+    "prisma": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp prisma",
+    "db:bootstrap": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts --seed-mode=dev",
+    "db:bootstrap:prod": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts --seed-mode=prod",
+    "db:bootstrap:no-seed": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts --no-seed",
+    "db:reset": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts --reset --seed-mode=dev",
+    "seed:dev": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts --seed-only --seed-mode=dev",
+    "seed:prod": "pnpm run ensure-tmp && cross-env TMPDIR=./tmp tsx src/db/bootstrap.ts --seed-only --seed-mode=prod",
+    "check:all": "pnpm prisma validate && pnpm build && pnpm test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/env": "^5.0.3",
+    "@fastify/swagger": "^9.6.1",
+    "@fastify/swagger-ui": "^5.2.4",
+    "@prisma/adapter-pg": "^7.5.0",
+    "@prisma/client": "^7.3.0",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.7.1",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.20.0",
+    "prisma": "^7.3.0"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.0.10",
+    "cross-env": "^10.1.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

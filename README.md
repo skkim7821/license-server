@@ -16,28 +16,29 @@
 - `ADMIN_JWT_EXPIRES_IN` (선택): JWT 만료 시간(기본 `12h`)
 - `PORT` (선택): 서버가 열릴 포트(기본 3000).
 
-환경 변수는 `.env`에 정의하고 `dotenv/config`로 `src/server.ts`, `prisma.config.ts`에서 자동 로드합니다.
+환경 변수는 `.env`에 정의하고 `dotenv/config`로 `apps/license-server/src/server.ts`, `apps/license-server/prisma.config.ts`에서 자동 로드합니다.
 
 ## 설치 · 실행
 1. 의존성 설치: `pnpm install`
 2. 임시/데이터 디렉터리 확보: `pnpm run ensure-tmp` (실행 스크립트가 `./tmp`를 생성합니다)
 3. DB 초기화: `pnpm run db:bootstrap` (개발 seed), 운영 초기화는 `pnpm run db:bootstrap:prod`
-4. 개발 서버: `pnpm dev ▶ tsx watch src/server.ts`
+4. 개발 서버: `pnpm dev ▶ pnpm --filter license-server dev`
 5. 배포/빌드: `pnpm build` → `pnpm start`
 
 로컬 통합 실행(비도커, backend+frontend):
 - `pnpm dev:local`
 - 이미 DB가 준비된 경우: `LOCAL_DEV_SKIP_BOOTSTRAP=1 pnpm dev:local`
 - 기본 포트(`3000`, `5174`)가 사용 중이면 자동으로 다음 포트로 fallback
+- `dev:local`은 `db:bootstrap:prod`를 사용해 관리자 계정(`ADMIN_EMAIL`/`ADMIN_PASSWORD`)만 seed합니다.
 
 ## 추가 커맨드
-- `pnpm test`: `vitest`를 이용한 단위 테스트 실행 (`src/routes/*.test.ts`)
+- `pnpm test`: `vitest`를 이용한 단위 테스트 실행 (`apps/license-server/src/routes/*.test.ts`)
 - `pnpm run prisma`: Prisma CLI로 마이그레이션/스크립트 관리
 - `pnpm run check:all`: schema validate + build + test 일괄 검증
 - `pnpm run db:bootstrap:no-seed`: 샘플 데이터 없이 스키마만 초기화
 - `pnpm run seed:dev`: 마이그레이션 없이 개발 seed만 재주입
 - `pnpm run seed:prod`: 마이그레이션 없이 운영 seed(관리자 계정만) 적용
-- `pnpm run frontend:dev`: React 관리자 UI(Vite) 개발 서버 실행 (`http://localhost:5174`)
+- `pnpm run frontend:dev`: React 관리자 UI(Vite) 개발 서버 실행 (`http://localhost:5174/`, 로컬 dev는 루트 경로 기준)
 - `pnpm run frontend:build`: React 관리자 UI 프로덕션 빌드 검증
 
 진행 현황 추적 방법은 [`docs/progress-tracking.md`](/Users/skkim/testspace/license-server/docs/progress-tracking.md) 참고.
@@ -57,7 +58,7 @@
    - `http://서버IP/health`
    - 운영 환경에서는 `/docs` 비활성화
 
-`docker-compose.yml`은 `postgres_data` 볼륨을 사용하므로 컨테이너 재시작 후에도 PostgreSQL 데이터가 유지됩니다.
+`deploy/docker/docker-compose.yml`은 `postgres_data` 볼륨을 사용하므로 컨테이너 재시작 후에도 PostgreSQL 데이터가 유지됩니다.
 
 ## 클라우드 이관용 표준 배포 절차
 다른 클라우드/서버로 바로 옮길 때는 `deploy` 기준으로 동일하게 적용합니다.
@@ -77,12 +78,12 @@ echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 ```
 4. 배포 실행
 ```bash
-docker compose --env-file .env -f deploy/docker-compose.prod.yml pull
-docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d --remove-orphans
+docker compose --env-file .env -f deploy/docker/docker-compose.prod.yml pull
+docker compose --env-file .env -f deploy/docker/docker-compose.prod.yml up -d --remove-orphans
 ```
 5. 확인
 ```bash
-docker compose --env-file .env -f deploy/docker-compose.prod.yml ps
+docker compose --env-file .env -f deploy/docker/docker-compose.prod.yml ps
 curl -fsS http://127.0.0.1/health
 ```
 
@@ -91,44 +92,64 @@ curl -fsS http://127.0.0.1/health
 - 인증서가 없으면 admin-web은 HTTP 모드로 자동 fallback.
 
 ## GitHub Actions 환경 변수 정리
-`deploy-manual.yml`(수동 배포 워크플로우)이 읽는 설정값입니다.  
 설정 위치: GitHub 저장소 `Settings > Secrets and variables > Actions`
 
-### 우선순위 규칙
-- 일부 키는 `vars.<KEY>`가 비어있지 않으면 Variables 값을 사용하고, 비어있으면 `secrets.<KEY>`로 fallback합니다.
-- 민감값(토큰/비밀번호/개인키)은 반드시 `Secrets` 사용을 권장합니다.
+### 1) `publish-ghcr.yml` (태그 푸시 시 이미지 빌드/푸시)
+- 트리거: `git push --tags` (`v*`)
+- 별도 커스텀 환경변수는 필요 없습니다.
+- 인증은 `secrets.GITHUB_TOKEN`을 사용합니다.
 
-### 필수 키 (deploy 실행에 필요)
-| Key | 권장 위치 | 예시 | 설명 |
-|---|---|---|---|
-| `SSH_PRIVATE_KEY` | Secret | `-----BEGIN OPENSSH PRIVATE KEY-----...` | 배포 서버 접속용 개인키. 워크플로우에서 `~/.ssh/deploy_key`로 저장해 SSH/SCP에 사용합니다. |
-| `SSH_HOST` | Variable | `lc.skkim.dev` 또는 `134.185.104.251` | 배포 대상 서버 주소. |
-| `SSH_PORT` | Variable | `22` | SSH 포트. 특별한 이유 없으면 22 권장. |
-| `SSH_USER` | Variable | `ubuntu` | SSH 로그인 사용자. |
-| `DEPLOY_PATH` | Variable | `/home/ubuntu/app` | 서버 내 배포 경로. `deploy/docker-compose.prod.yml`가 이 경로 하위에 업로드됩니다. |
-| `GHCR_USERNAME` | Variable | `skkim7821` | GHCR 네임스페이스/로그인 사용자. 런타임에서 `GHCR_NAMESPACE`로도 사용됩니다. |
-| `GHCR_TOKEN` | Secret | `ghp_...` 또는 `github_pat_...` | 서버에서 `docker login ghcr.io`에 사용하는 토큰(패키지 read 권한 필요). |
-| `ADMIN_EMAIL` | Secret | `admin@example.com` | 운영 관리자 계정 이메일(seed 시 upsert 기준 키). |
-| `ADMIN_PASSWORD` | Secret | `very-strong-password` | 운영 관리자 계정 비밀번호(seed 시 갱신 가능). |
-| `ADMIN_JWT_SECRET` | Secret | `long-random-secret` | 관리자 JWT 서명 키. |
+### 2) `deploy-manual.yml` (수동 배포)
+- 트리거: `workflow_dispatch`
+- 입력값(`inputs`) 3개가 먼저 필요합니다.
 
-### 권장 키 (기능/보안 강화)
-| Key | 권장 위치 | 기본/예시 | 설명 |
-|---|---|---|---|
-| `SERVER_NAME` | Variable | `lc.skkim.dev` | admin-web Nginx `server_name`에 주입됩니다. |
-| `ENABLE_HTTPS` | Variable | `true` | `true/false`. HTTPS 템플릿 사용 여부. |
-| `SSL_CERT_PATH` | Variable | `/etc/letsencrypt/live/lc.skkim.dev/fullchain.pem` | 인증서 파일 경로(서버 기준). |
-| `SSL_KEY_PATH` | Variable | `/etc/letsencrypt/live/lc.skkim.dev/privkey.pem` | 개인키 파일 경로(서버 기준). |
+| Input | 예시 | 설명 |
+|---|---|---|
+| `backend_tag` | `v0.1.8` | 백엔드 이미지 태그 (`ghcr.io/<namespace>/license-server:<tag>`) |
+| `admin_tag` | `v0.1.8` | 프론트(admin-web) 이미지 태그 (`ghcr.io/<namespace>/license-server-admin-web:<tag>`) |
+| `confirm` | `DEPLOY_NOW` | 안전장치 문자열. 정확히 일치해야 배포 실행 |
 
-### 변수 선택 가이드
-- `Variables`에 두기 좋은 값: 호스트, 포트, 경로, 도메인처럼 노출돼도 상대적으로 안전한 운영 설정.
-- `Secrets`에 둬야 하는 값: 개인키, 토큰, 비밀번호, JWT 시크릿 등.
+### 3) `deploy-manual.yml`가 읽는 Secrets/Variables (전체)
+아래 키가 실제 배포 스크립트(`scripts/deploy/manual-deploy.sh`)에 전달됩니다.
 
-### 빠른 체크리스트
-- `SSH_PRIVATE_KEY`는 반드시 개인키 전체 문자열이어야 합니다.
-- `DEPLOY_PATH`는 서버에서 실제 존재하는 절대경로여야 합니다.
-- `GHCR_TOKEN`은 대상 이미지 pull 권한(`read:packages`)이 있어야 합니다.
-- HTTPS 사용 시 서버에 인증서 파일이 실제로 존재해야 합니다.
+| Key | 권장 위치 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `SSH_PRIVATE_KEY` | Secret | 예 | 없음 | 서버 SSH 접속 개인키 전체 문자열 |
+| `SSH_HOST` | Variable | 예 | 없음 | 배포 대상 서버 호스트/IP |
+| `SSH_PORT` | Variable | 예 | 없음 | SSH 포트 |
+| `SSH_USER` | Variable | 예 | 없음 | SSH 사용자 |
+| `DEPLOY_PATH` | Variable | 예 | 없음 | 서버 내 배포 루트 (예: `/home/ubuntu/app`) |
+| `GHCR_USERNAME` | Variable | 예 | 없음 | GHCR 네임스페이스/로그인 사용자명 |
+| `GHCR_TOKEN` | Secret | 예 | 없음 | 서버에서 `docker login ghcr.io`에 사용할 토큰 (`read:packages`) |
+| `ADMIN_EMAIL` | Secret | 예 | 없음 | 운영 관리자 이메일(seed/upsert 기준) |
+| `ADMIN_PASSWORD` | Secret | 예 | 없음 | 운영 관리자 비밀번호(seed 시 해시 갱신) |
+| `ADMIN_JWT_SECRET` | Secret | 예 | 없음 | 관리자 JWT 서명키 |
+| `SERVER_NAME` | Variable | 권장 | `_` | Nginx `server_name` (`lc.skkim.dev` 권장) |
+| `ENABLE_HTTPS` | Variable | 권장 | `true` | `true/false/1/yes` |
+| `SSL_CERT_PATH` | Variable | 권장 | `/etc/letsencrypt/live/lc.skkim.dev/fullchain.pem` | 인증서 경로 |
+| `SSL_KEY_PATH` | Variable | 권장 | `/etc/letsencrypt/live/lc.skkim.dev/privkey.pem` | 개인키 경로 |
+
+### 4) 우선순위 규칙 (중요)
+`deploy-manual.yml`에서 아래 키는 `vars` 우선, 비어있으면 `secrets` fallback:
+- `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `DEPLOY_PATH`, `GHCR_USERNAME`
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_JWT_SECRET`
+- `SERVER_NAME`, `ENABLE_HTTPS`, `SSL_CERT_PATH`, `SSL_KEY_PATH`
+
+즉, 같은 키를 Variables와 Secrets 둘 다 넣어두면 Variables 값이 먼저 사용됩니다.
+
+### 5) 배포 중 서버에 생성되는 파일
+배포 시 서버의 `${DEPLOY_PATH}/deploy/.env.prod`를 매번 덮어씁니다.
+생성 키:
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_JWT_SECRET`
+- `GHCR_NAMESPACE`(=`GHCR_USERNAME`)
+- `SERVER_NAME`, `ENABLE_HTTPS`, `SSL_CERT_PATH`, `SSL_KEY_PATH`
+- `BACKEND_IMAGE_TAG`, `ADMIN_WEB_IMAGE_TAG`
+
+### 6) 운영 체크리스트
+- `DEPLOY_PATH`는 실제 존재하는 절대경로여야 함 (`deploy/docker/docker-compose.prod.yml` 업로드 대상).
+- `GHCR_TOKEN`은 배포 서버에서 대상 이미지 pull 가능한 권한이어야 함.
+- `.dev` 도메인 사용 시 HTTPS가 사실상 필수이므로 `SERVER_NAME`, 인증서 경로를 정확히 설정.
+- `SSH_PRIVATE_KEY`는 공개키(`ssh-rsa ...`)가 아니라 개인키 원문이어야 함.
 
 ## Docker Fullstack 실행 (내부 테스트)
 프론트/백엔드/DB를 한 번에 실행하려면:
@@ -144,8 +165,8 @@ pnpm docker:up
 - PostgreSQL(로컬 전용): `127.0.0.1:5532`
 
 참고:
-- 내부 테스트는 `docker-compose.dev.yml`을 사용합니다.
-- 운영 배포는 `docker-compose.yml`을 사용합니다.
+- 내부 테스트는 `deploy/docker/docker-compose.dev.yml`을 사용합니다.
+- 운영 배포는 `deploy/docker/docker-compose.yml`을 사용합니다.
 - Frontend는 Nginx reverse proxy로 `/admin`, `/license`, `/docs`, `/health`를 backend(`license-server`)로 전달합니다.
 - 따라서 Frontend 코드의 상대경로 API 호출(`/admin/...`)을 그대로 사용합니다.
 
@@ -201,7 +222,7 @@ docker compose up -d --build
 ```
 
 ### 5) 롤백
-`docker-compose.yml`의 `image` 태그를 이전 버전으로 변경 후:
+`deploy/docker/docker-compose.yml`의 `image` 태그를 이전 버전으로 변경 후:
 ```bash
 docker compose pull
 docker compose up -d
@@ -272,7 +293,7 @@ docker container prune -f
 ## Swagger · 문서
 - 개발/테스트 시 `http://localhost:3000/docs`에서 swagger/ui 확인 가능
 - 최소 관리자 UI(레거시 fallback): `http://localhost:3000/admin-ui` (2026-05-01 제거 예정)
-- React 관리자 UI(신규): `http://localhost:5174` (`pnpm run frontend:dev`)
+- React 관리자 UI(신규): `http://localhost:5174/` (`pnpm run frontend:dev`, 프로덕션/Nginx에서는 `/license-console-k9/` 경유)
 
 ## 부트스트랩 + 스모크 절차
 신규 서버/로컬에서 아래 순서로 바로 점검할 수 있습니다.
@@ -296,9 +317,9 @@ curl -fsS http://127.0.0.1:3000/admin-ui >/dev/null
    - 사용자/라이선스 목록 조회, 연장/상태변경/삭제 액션 수행
 
 ## 아키텍처 참고
-- `src/routes/admin.ts`/`src/routes/license.ts`: Fastify 플러그인 방식으로 라우터 구성, `schema` 필드로 요청/응답 스펙을 정의
-- `src/db.ts`: `PrismaClient` 연결 초기화와 재호출 방지용 `initialized` 플래그
-- `generated/prisma/client`: Prisma Client 자동 생성 코드
+- `apps/license-server/src/routes/admin.ts`/`apps/license-server/src/routes/license.ts`: Fastify 플러그인 방식으로 라우터 구성, `schema` 필드로 요청/응답 스펙을 정의
+- `apps/license-server/src/db.ts`: `PrismaClient` 연결 초기화와 재호출 방지용 `initialized` 플래그
+- `apps/license-server/generated/prisma/client`: Prisma Client 자동 생성 코드
 
 ## 다음 단계 추천
 1. 관리자 계정 운영 절차(비밀번호 로테이션/비활성화 계정 처리) 문서화

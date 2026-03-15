@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: license-server-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: license_server
+      POSTGRES_USER: license
+      POSTGRES_PASSWORD: license
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  license-server:
+    image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server:${BACKEND_IMAGE_TAG:-main}
+    container_name: license-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://license:license@postgres:5432/license_server?schema=public
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
+
+  admin-web:
+    image: ghcr.io/${GHCR_NAMESPACE:-skkim7821}/license-server-admin-web:${ADMIN_WEB_IMAGE_TAG:-main}
+    container_name: license-server-admin-web
+    restart: unless-stopped
+    depends_on:
+      license-server:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SERVER_NAME: ${SERVER_NAME:-_}
+      ENABLE_HTTPS: ${ENABLE_HTTPS:-true}
+      SSL_CERT_PATH: ${SSL_CERT_PATH:-/etc/letsencrypt/live/lc.skkim.dev/fullchain.pem}
+      SSL_KEY_PATH: ${SSL_KEY_PATH:-/etc/letsencrypt/live/lc.skkim.dev/privkey.pem}
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/lib/letsencrypt:/var/lib/letsencrypt:ro
+
+volumes:
+  postgres_data:

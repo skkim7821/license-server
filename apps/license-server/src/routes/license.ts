@@ -99,6 +99,29 @@ type LicenseWithProduct = Prisma.LicenseGetPayload<{ include: { product: true } 
 
 export type LicenseRoutePrisma = Pick<PrismaClient, "license" | "licenseDevice">;
 
+function normalizeClientAddress(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === "::ffff:127.0.0.1") {
+    return "127.0.0.1";
+  }
+
+  return lowered === "localhost" ? "127.0.0.1" : trimmed;
+}
+
+function isLoopbackAddress(value: string) {
+  return value === "127.0.0.1" || value === "::1";
+}
+
+function isCountableDeviceAddress(value?: string | null) {
+  const normalized = normalizeClientAddress(value ?? undefined);
+  return normalized.length > 0 && !isLoopbackAddress(normalized);
+}
+
 const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRoutePrisma) => {
   fastify.post(
     "/verify",
@@ -130,14 +153,20 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
       const forwardedHeader = Array.isArray(request.headers["x-forwarded-for"])
         ? request.headers["x-forwarded-for"][0]
         : request.headers["x-forwarded-for"];
-      const forwardedIp = forwardedHeader?.split(",")[0].trim();
-      const resolvedIpAddr = (
-        providedIpAddr?.trim() ||
+      const providedIp = normalizeClientAddress(providedIpAddr);
+      const forwardedIp = normalizeClientAddress(forwardedHeader?.split(",")[0]);
+      const requestIp = normalizeClientAddress(request.ip);
+      const socketIp = normalizeClientAddress(request.socket.remoteAddress);
+
+      // Prefer non-loopback identity to avoid counting proxy loopback (127.0.0.1) as an extra device.
+      const resolvedIpAddr =
+        (providedIp && !isLoopbackAddress(providedIp) ? providedIp : "") ||
+        (forwardedIp && !isLoopbackAddress(forwardedIp) ? forwardedIp : "") ||
+        (requestIp && !isLoopbackAddress(requestIp) ? requestIp : "") ||
+        providedIp ||
         forwardedIp ||
-        request.ip ||
-        request.socket.remoteAddress ||
-        ""
-      ).trim();
+        requestIp ||
+        socketIp;
 
       if (!resolvedIpAddr) {
         return reply.status(400).send({ valid: false, reason: "missing_fields" });
@@ -175,10 +204,14 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
         return reply.status(403).send({ valid: false, reason: "revoked" });
       }
 
-      const existingDevice = license.devices.find((device) => device.ipAddr === resolvedIpAddr);
+      const existingDevice = license.devices.find(
+        (device) => normalizeClientAddress(device.ipAddr) === normalizeClientAddress(resolvedIpAddr)
+      );
+      const countedDevices = license.devices.filter((device) => isCountableDeviceAddress(device.ipAddr));
+      const countedDeviceCount = countedDevices.length;
 
       if (existingDevice) {
-        const remaining = Math.max(license.maxDevices - license.devices.length, 0);
+        const remaining = Math.max(license.maxDevices - countedDeviceCount, 0);
         return reply.send({
           valid: true,
           expiresAt: license.expiresAt,
@@ -186,7 +219,16 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
         });
       }
 
-      if (license.devices.length >= license.maxDevices) {
+      if (!isCountableDeviceAddress(resolvedIpAddr)) {
+        const remaining = Math.max(license.maxDevices - countedDeviceCount, 0);
+        return reply.send({
+          valid: true,
+          expiresAt: license.expiresAt,
+          remainingDevices: remaining,
+        });
+      }
+
+      if (countedDeviceCount >= license.maxDevices) {
         return reply.status(403).send({ valid: false, reason: "max_devices_reached" });
       }
 
@@ -197,7 +239,7 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
         },
       });
 
-      const remaining = Math.max(license.maxDevices - (license.devices.length + 1), 0);
+      const remaining = Math.max(license.maxDevices - (countedDeviceCount + 1), 0);
       return reply.send({
         valid: true,
         expiresAt: license.expiresAt,

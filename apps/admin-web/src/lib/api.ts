@@ -112,6 +112,13 @@ export const adminApi = {
       body: { days },
     });
   },
+  updateLicenseMaxDevices(token: string, id: string, maxDevices: number) {
+    return request<{ license: LicenseRecord }>(`/admin/licenses/${id}/max-devices`, {
+      method: "PATCH",
+      token,
+      body: { maxDevices },
+    });
+  },
   setLicenseStatus(token: string, id: string, status: "active" | "revoked") {
     return request<{ license: LicenseRecord }>(`/admin/licenses/${id}/status`, {
       method: "PATCH",

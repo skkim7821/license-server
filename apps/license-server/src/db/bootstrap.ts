@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "../load-root-env";
 import { execSync } from "node:child_process";
 import { addDays } from "date-fns";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -94,13 +94,6 @@ async function seedDev(prisma: any) {
       expiresAt: addDays(new Date(), 30),
       status: "active",
       maxDevices: product.maxDevices,
-    },
-  });
-
-  await prisma.licenseDevice.create({
-    data: {
-      licenseId: license.id,
-      ipAddr: "127.0.0.1",
     },
   });
 

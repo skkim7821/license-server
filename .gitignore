@@ -3,10 +3,7 @@ node_modules
 .env
 .tmp/
 tmp/
-/generated/prisma
-db/*.db
-db/*.db-shm
-db/*.db-wal
+/apps/license-server/generated/prisma
 
 
 .pnpm-store/
