@@ -7,6 +7,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional additional image tag to publish (for example: v0.2.1)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -48,6 +53,7 @@ jobs:
           push: true
           tags: |
             ${{ github.event_name == 'workflow_dispatch' && format('ghcr.io/{0}:main', github.repository) || '' }}
+            ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag != '' && format('ghcr.io/{0}:{1}', github.repository, github.event.inputs.image_tag) || '' }}
             ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -69,5 +75,6 @@ jobs:
           push: true
           tags: |
             ${{ github.event_name == 'workflow_dispatch' && format('ghcr.io/{0}-admin-web:main', github.repository) || '' }}
+            ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag != '' && format('ghcr.io/{0}-admin-web:{1}', github.repository, github.event.inputs.image_tag) || '' }}
             ${{ steps.meta_admin.outputs.tags }}
           labels: ${{ steps.meta_admin.outputs.labels }}

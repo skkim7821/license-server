@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       backend_tag:
-        description: "Backend image tag (default: main)"
+        description: "Backend image tag. Use main for latest main build, or a published immutable tag like v0.2.1"
         required: false
         default: "main"
       admin_tag:
-        description: "Admin-web image tag (default: main)"
+        description: "Admin-web image tag. Use main for latest main build, or a published immutable tag like v0.2.1"
         required: false
         default: "main"
       confirm:

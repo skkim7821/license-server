@@ -91,11 +91,14 @@ timeout "${PULL_TIMEOUT}" "${COMPOSE[@]}" pull --quiet
 echo "[deploy] start postgres"
 timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres
 
+echo "[deploy] start license-server"
+"${COMPOSE[@]}" up -d license-server
+
 echo "[deploy] migrate"
-"${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm prisma migrate deploy
+"${COMPOSE[@]}" exec -T license-server pnpm prisma migrate deploy
 
 echo "[deploy] seed"
-"${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm run seed:prod
+"${COMPOSE[@]}" exec -T license-server pnpm run seed:prod
 
 echo "[deploy] start services"
 timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --force-recreate --wait --wait-timeout 180 license-server admin-web edge-proxy
