@@ -98,14 +98,14 @@ echo "[deploy] start license-server"
 "${COMPOSE[@]}" up -d license-server
 
 echo "[deploy] migrate"
-"${COMPOSE[@]}" exec -T license-server pnpm prisma migrate deploy
+"${COMPOSE[@]}" exec -T --interactive=false license-server pnpm prisma migrate deploy
 
 echo "[deploy] start services"
 timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --force-recreate --wait --wait-timeout 180 license-server admin-web edge-proxy
 
 if [ "${SEED_ON_DEPLOY}" = "true" ]; then
   echo "[deploy] seed"
-  "${COMPOSE[@]}" exec -T license-server pnpm run seed:prod
+  "${COMPOSE[@]}" exec -T --interactive=false license-server pnpm run seed:prod
 else
   echo "[deploy] skip seed (SEED_ON_DEPLOY=${SEED_ON_DEPLOY})"
 fi
