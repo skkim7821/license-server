@@ -11,6 +11,10 @@ on:
         description: "Admin-web image tag. Use main for latest main build, or a published immutable tag like v0.2.1"
         required: false
         default: "main"
+      seed_on_deploy:
+        description: "Run production seed after migrate. Use true only when you intentionally want seed:prod"
+        required: false
+        default: "false"
       confirm:
         description: "Type DEPLOY_NOW to continue"
         required: true
@@ -36,6 +40,7 @@ jobs:
         env:
           BACKEND_TAG: ${{ github.event.inputs.backend_tag }}
           ADMIN_TAG: ${{ github.event.inputs.admin_tag }}
+          SEED_ON_DEPLOY: ${{ github.event.inputs.seed_on_deploy }}
         run: |
           set -euo pipefail
           tag_regex='^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'
@@ -47,6 +52,14 @@ jobs:
             echo "Invalid admin_tag: ${ADMIN_TAG}"
             exit 1
           fi
+          case "${SEED_ON_DEPLOY}" in
+            true|false)
+              ;;
+            *)
+              echo "Invalid seed_on_deploy: ${SEED_ON_DEPLOY}"
+              exit 1
+              ;;
+          esac
 
       - name: Prepare SSH key
         env:
@@ -60,6 +73,7 @@ jobs:
         env:
           BACKEND_IMAGE_TAG: ${{ github.event.inputs.backend_tag }}
           ADMIN_WEB_IMAGE_TAG: ${{ github.event.inputs.admin_tag }}
+          SEED_ON_DEPLOY: ${{ github.event.inputs.seed_on_deploy }}
           SSH_HOST: ${{ vars.SSH_HOST != '' && vars.SSH_HOST || secrets.SSH_HOST }}
           SSH_PORT: ${{ vars.SSH_PORT != '' && vars.SSH_PORT || secrets.SSH_PORT }}
           SSH_USER: ${{ vars.SSH_USER != '' && vars.SSH_USER || secrets.SSH_USER }}

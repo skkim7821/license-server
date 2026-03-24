@@ -17,6 +17,7 @@ SERVER_NAME="${SERVER_NAME:-_}"
 ENABLE_HTTPS="${ENABLE_HTTPS:-true}"
 SSL_CERT_PATH="${SSL_CERT_PATH:-/etc/letsencrypt/live/lc.skkim.dev/fullchain.pem}"
 SSL_KEY_PATH="${SSL_KEY_PATH:-/etc/letsencrypt/live/lc.skkim.dev/privkey.pem}"
+SEED_ON_DEPLOY="${SEED_ON_DEPLOY:-false}"
 
 PULL_TIMEOUT="${PULL_TIMEOUT:-600}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-240}"
@@ -47,6 +48,7 @@ SSL_CERT_PATH=${SSL_CERT_PATH}
 SSL_KEY_PATH=${SSL_KEY_PATH}
 BACKEND_IMAGE_TAG=${BACKEND_IMAGE_TAG}
 ADMIN_WEB_IMAGE_TAG=${ADMIN_WEB_IMAGE_TAG}
+SEED_ON_DEPLOY=${SEED_ON_DEPLOY}
 EOF
 
 echo "[deploy] verify ssh"
@@ -67,6 +69,7 @@ ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
   GHCR_USERNAME="${GHCR_USERNAME}" \
   GHCR_TOKEN="${GHCR_TOKEN}" \
   DEPLOY_PATH="${DEPLOY_PATH}" \
+  SEED_ON_DEPLOY="${SEED_ON_DEPLOY}" \
   'bash -se' <<'EOF'
 set -euo pipefail
 
@@ -97,11 +100,15 @@ echo "[deploy] start license-server"
 echo "[deploy] migrate"
 "${COMPOSE[@]}" exec -T license-server pnpm prisma migrate deploy
 
-echo "[deploy] seed"
-"${COMPOSE[@]}" exec -T license-server pnpm run seed:prod
-
 echo "[deploy] start services"
 timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --force-recreate --wait --wait-timeout 180 license-server admin-web edge-proxy
+
+if [ "${SEED_ON_DEPLOY}" = "true" ]; then
+  echo "[deploy] seed"
+  "${COMPOSE[@]}" exec -T license-server pnpm run seed:prod
+else
+  echo "[deploy] skip seed (SEED_ON_DEPLOY=${SEED_ON_DEPLOY})"
+fi
 
 "${COMPOSE[@]}" ps
 echo "[deploy] done"
