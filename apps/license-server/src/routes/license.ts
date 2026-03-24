@@ -5,10 +5,10 @@ import { prisma } from "../db";
 
 const verifyLicensePayloadSchema = {
   type: "object",
-  required: ["licenseKey"],
+  required: ["licenseKey", "deviceId"],
   properties: {
     licenseKey: { type: "string" },
-    ipAddr: { type: "string", nullable: true },
+    deviceId: { type: "string" },
   },
 };
 
@@ -87,7 +87,7 @@ const userInfoErrorSchema = {
 
 type VerifyLicenseBody = {
   licenseKey: string;
-  ipAddr?: string;
+  deviceId: string;
 };
 
 type UserInfoQuery = {
@@ -99,27 +99,9 @@ type LicenseWithProduct = Prisma.LicenseGetPayload<{ include: { product: true } 
 
 export type LicenseRoutePrisma = Pick<PrismaClient, "license" | "licenseDevice">;
 
-function normalizeClientAddress(value?: string) {
+function normalizeDeviceId(value?: string) {
   const trimmed = value?.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const lowered = trimmed.toLowerCase();
-  if (lowered === "::ffff:127.0.0.1") {
-    return "127.0.0.1";
-  }
-
-  return lowered === "localhost" ? "127.0.0.1" : trimmed;
-}
-
-function isLoopbackAddress(value: string) {
-  return value === "127.0.0.1" || value === "::1";
-}
-
-function isCountableDeviceAddress(value?: string | null) {
-  const normalized = normalizeClientAddress(value ?? undefined);
-  return normalized.length > 0 && !isLoopbackAddress(normalized);
+  return trimmed ? trimmed : "";
 }
 
 const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRoutePrisma) => {
@@ -128,7 +110,7 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
     {
       schema: {
         summary: "Verify an active license",
-        description: "Validates a license by license key and registers the caller IP.",
+        description: "Validates a license by license key and registers the caller device identifier.",
         tags: ["license"],
         body: verifyLicensePayloadSchema,
         response: {
@@ -143,32 +125,12 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
     async (request, reply) => {
       const {
         licenseKey: rawLicenseKey,
-        ipAddr: providedIpAddr,
+        deviceId: rawDeviceId,
       } = request.body as VerifyLicenseBody;
       const normalizedLicenseKey = rawLicenseKey?.trim().toUpperCase();
+      const normalizedDeviceId = normalizeDeviceId(rawDeviceId);
 
-      if (!normalizedLicenseKey) {
-        return reply.status(400).send({ valid: false, reason: "missing_fields" });
-      }
-      const forwardedHeader = Array.isArray(request.headers["x-forwarded-for"])
-        ? request.headers["x-forwarded-for"][0]
-        : request.headers["x-forwarded-for"];
-      const providedIp = normalizeClientAddress(providedIpAddr);
-      const forwardedIp = normalizeClientAddress(forwardedHeader?.split(",")[0]);
-      const requestIp = normalizeClientAddress(request.ip);
-      const socketIp = normalizeClientAddress(request.socket.remoteAddress);
-
-      // Prefer non-loopback identity to avoid counting proxy loopback (127.0.0.1) as an extra device.
-      const resolvedIpAddr =
-        (providedIp && !isLoopbackAddress(providedIp) ? providedIp : "") ||
-        (forwardedIp && !isLoopbackAddress(forwardedIp) ? forwardedIp : "") ||
-        (requestIp && !isLoopbackAddress(requestIp) ? requestIp : "") ||
-        providedIp ||
-        forwardedIp ||
-        requestIp ||
-        socketIp;
-
-      if (!resolvedIpAddr) {
+      if (!normalizedLicenseKey || !normalizedDeviceId) {
         return reply.status(400).send({ valid: false, reason: "missing_fields" });
       }
 
@@ -205,21 +167,11 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
       }
 
       const existingDevice = license.devices.find(
-        (device) => normalizeClientAddress(device.ipAddr) === normalizeClientAddress(resolvedIpAddr)
+        (device) => normalizeDeviceId(device.deviceId) === normalizedDeviceId
       );
-      const countedDevices = license.devices.filter((device) => isCountableDeviceAddress(device.ipAddr));
-      const countedDeviceCount = countedDevices.length;
+      const countedDeviceCount = license.devices.length;
 
       if (existingDevice) {
-        const remaining = Math.max(license.maxDevices - countedDeviceCount, 0);
-        return reply.send({
-          valid: true,
-          expiresAt: license.expiresAt,
-          remainingDevices: remaining,
-        });
-      }
-
-      if (!isCountableDeviceAddress(resolvedIpAddr)) {
         const remaining = Math.max(license.maxDevices - countedDeviceCount, 0);
         return reply.send({
           valid: true,
@@ -235,7 +187,7 @@ const registerVerifyRoute = (fastify: FastifyInstance, prismaInstance: LicenseRo
       await prismaInstance.licenseDevice.create({
         data: {
           licenseId: license.id,
-          ipAddr: resolvedIpAddr,
+          deviceId: normalizedDeviceId,
         },
       });
 

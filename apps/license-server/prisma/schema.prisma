@@ -64,11 +64,11 @@ model License {
 model LicenseDevice {
   id          String   @id @default(cuid())
   licenseId   String
-  ipAddr      String
+  deviceId    String
   createdAt   DateTime @default(now())
   license     License  @relation(fields: [licenseId], references: [id])
 
-  @@unique([licenseId, ipAddr])
+  @@unique([licenseId, deviceId])
 }
 
 enum LicenseStatus {

@@ -35,5 +35,5 @@ export type LicenseRecord = {
   unblockedNote: string | null;
   maxDevices: number;
   deviceCount?: number;
-  deviceIps?: string[];
+  deviceIds?: string[];
 };

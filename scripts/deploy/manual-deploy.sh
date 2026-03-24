@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "${ROOT_DIR}"
-
-ENV_FILE="${ENV_FILE:-.env}"
-if [ -f "${ENV_FILE}" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "${ENV_FILE}"
-  set +a
-fi
-
 : "${BACKEND_IMAGE_TAG:?BACKEND_IMAGE_TAG is required}"
 : "${ADMIN_WEB_IMAGE_TAG:?ADMIN_WEB_IMAGE_TAG is required}"
 : "${SSH_HOST:?SSH_HOST is required}"
@@ -31,8 +20,6 @@ SSL_KEY_PATH="${SSL_KEY_PATH:-/etc/letsencrypt/live/lc.skkim.dev/privkey.pem}"
 
 PULL_TIMEOUT="${PULL_TIMEOUT:-600}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-240}"
-MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT:-180}"
-SEED_TIMEOUT="${SEED_TIMEOUT:-180}"
 
 SSH_COMMON_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
 COMPOSE_SRC="deploy/docker/docker-compose.prod.yml"
@@ -77,9 +64,6 @@ echo "[deploy] run remote deploy"
 ssh ${SSH_COMMON_OPTS} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
   PULL_TIMEOUT="${PULL_TIMEOUT}" \
   WAIT_TIMEOUT="${WAIT_TIMEOUT}" \
-  MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT}" \
-  SEED_TIMEOUT="${SEED_TIMEOUT}" \
-  SERVER_NAME="${SERVER_NAME}" \
   GHCR_USERNAME="${GHCR_USERNAME}" \
   GHCR_TOKEN="${GHCR_TOKEN}" \
   DEPLOY_PATH="${DEPLOY_PATH}" \
@@ -98,91 +82,24 @@ esac
 cd "${DEPLOY_PATH}"
 COMPOSE=(docker compose --env-file deploy/.env.prod -f deploy/docker/docker-compose.prod.yml)
 
-dump_logs() {
-  local service="$1"
-  echo "[deploy] ===== ${service} logs ====="
-  "${COMPOSE[@]}" logs --tail=120 "${service}" || true
-}
-
-run_step() {
-  local label="$1"
-  local timeout_seconds="$2"
-  shift 2
-
-  local started_at="${SECONDS}"
-  local status=0
-  local cmd_pid
-  local heartbeat_pid
-
-  echo "[deploy] ${label}"
-
-  timeout --foreground "${timeout_seconds}" "$@" &
-  cmd_pid=$!
-
-  (
-    while kill -0 "${cmd_pid}" 2>/dev/null; do
-      sleep 20
-      kill -0 "${cmd_pid}" 2>/dev/null || exit 0
-      echo "[deploy] ${label} still running... ($((SECONDS - started_at))s elapsed)"
-    done
-  ) &
-  heartbeat_pid=$!
-
-  set +e
-  wait "${cmd_pid}"
-  status=$?
-  set -e
-
-  kill "${heartbeat_pid}" 2>/dev/null || true
-  wait "${heartbeat_pid}" 2>/dev/null || true
-
-  if [ "${status}" -eq 0 ]; then
-    echo "[deploy] ${label} done ($((SECONDS - started_at))s total)"
-    return 0
-  fi
-
-  if [ "${status}" -eq 124 ]; then
-    echo "[deploy] ${label} timed out after ${timeout_seconds}s"
-  else
-    echo "[deploy] ${label} failed with exit code ${status}"
-  fi
-
-  return "${status}"
-}
-
 echo "[deploy] ghcr login"
 echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
-if ! run_step "pull images" "${PULL_TIMEOUT}" "${COMPOSE[@]}" pull; then
-  "${COMPOSE[@]}" config >/dev/null || true
-  exit 1
-fi
+echo "[deploy] pull images (quiet)"
+timeout "${PULL_TIMEOUT}" "${COMPOSE[@]}" pull --quiet
 
-if ! run_step "start postgres" "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres; then
-  dump_logs postgres
-  exit 1
-fi
+echo "[deploy] start postgres"
+timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres
 
-if ! run_step "migrate" "${MIGRATE_TIMEOUT}" "${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm prisma migrate deploy; then
-  dump_logs postgres
-  dump_logs license-server
-  exit 1
-fi
+echo "[deploy] migrate"
+"${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm prisma migrate deploy
 
-if ! run_step "seed" "${SEED_TIMEOUT}" "${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm run seed:prod; then
-  dump_logs postgres
-  dump_logs license-server
-  exit 1
-fi
+echo "[deploy] seed"
+"${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm run seed:prod
 
-if ! run_step "start services" "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 license-server admin-web edge-proxy; then
-  "${COMPOSE[@]}" ps || true
-  dump_logs edge-proxy
-  dump_logs admin-web
-  dump_logs license-server
-  exit 1
-fi
+echo "[deploy] start services"
+timeout "${WAIT_TIMEOUT}" "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 180 license-server admin-web edge-proxy
 
 "${COMPOSE[@]}" ps
-echo "[deploy] ready: https://${SERVER_NAME}/license-console-k9/"
+echo "[deploy] done"
 EOF

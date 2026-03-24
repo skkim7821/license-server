@@ -146,7 +146,7 @@ export function LicensesPage({
               <th>Status</th>
               <th>Expires</th>
               <th>Devices</th>
-              <th>Device IPs</th>
+              <th>Device IDs</th>
               <th />
             </tr>
           </thead>
@@ -159,7 +159,7 @@ export function LicensesPage({
                 <td>{license.blockReason ? `${license.status} (${license.blockReason})` : license.status}</td>
                 <td>{new Date(license.expiresAt).toLocaleString()}</td>
                 <td>{`${license.deviceCount ?? 0}/${license.maxDevices}`}</td>
-                <td>{license.deviceIps?.length ? license.deviceIps.join(", ") : "-"}</td>
+                <td>{license.deviceIds?.length ? license.deviceIds.join(", ") : "-"}</td>
                 <td className="actions">
                   <button type="button" className="btn secondary" onClick={() => void onExtend(license.id, 30)}>
                     +30d

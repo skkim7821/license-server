@@ -820,7 +820,7 @@ describe("adminRoutes", () => {
         unblockedAt: null,
         unblockedBy: null,
         unblockedNote: null,
-        devices: [{ ipAddr: "127.0.0.1" }, { ipAddr: "14.33.25.123" }],
+        devices: [{ deviceId: "device-1" }, { deviceId: "device-2" }],
       },
       {
         id: "license-b",
@@ -867,8 +867,8 @@ describe("adminRoutes", () => {
           unblockedAt: null,
           unblockedBy: null,
           unblockedNote: null,
-          deviceCount: 1,
-          deviceIps: ["14.33.25.123"],
+          deviceCount: 2,
+          deviceIds: ["device-1", "device-2"],
         },
         {
           id: "license-b",
@@ -886,7 +886,7 @@ describe("adminRoutes", () => {
           unblockedBy: null,
           unblockedNote: null,
           deviceCount: 0,
-          deviceIps: [],
+          deviceIds: [],
         },
       ],
     });
@@ -909,7 +909,7 @@ describe("adminRoutes", () => {
         maxDevices: true,
         devices: {
           select: {
-            ipAddr: true,
+            deviceId: true,
           },
         },
       },

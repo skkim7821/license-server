@@ -146,12 +146,12 @@ const licenseListItemSchema = {
   properties: {
     ...licenseResponseSchema.properties.license.properties,
     deviceCount: { type: "integer", minimum: 0 },
-    deviceIps: {
+    deviceIds: {
       type: "array",
       items: { type: "string" },
     },
   },
-  required: [...licenseResponseSchema.properties.license.required, "deviceCount", "deviceIps"],
+  required: [...licenseResponseSchema.properties.license.required, "deviceCount", "deviceIds"],
 };
 
 const licensesListResponseSchema = {
@@ -474,37 +474,21 @@ function toApiLicenseStatus(license: { status: string; expiresAt: Date }): Licen
   return "active";
 }
 
-function normalizeAddress(value?: string | null) {
+function normalizeDeviceId(value?: string | null) {
   const trimmed = value?.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const lowered = trimmed.toLowerCase();
-  if (lowered === "::ffff:127.0.0.1" || lowered === "localhost") {
-    return "127.0.0.1";
-  }
-
-  return trimmed;
+  return trimmed ? trimmed : "";
 }
 
-function isLoopbackAddress(value: string) {
-  return value === "127.0.0.1" || value === "::1";
+function countActiveDevices(devices: Array<{ deviceId: string }>) {
+  return devices.filter((device) => normalizeDeviceId(device.deviceId).length > 0).length;
 }
 
-function countActiveDevices(devices: Array<{ ipAddr: string }>) {
-  return devices.filter((device) => {
-    const normalized = normalizeAddress(device.ipAddr);
-    return normalized.length > 0 && !isLoopbackAddress(normalized);
-  }).length;
-}
+function getActiveDeviceIds(devices: Array<{ deviceId: string }>) {
+  const activeDeviceIds = devices
+    .map((device) => normalizeDeviceId(device.deviceId))
+    .filter((deviceId) => deviceId.length > 0);
 
-function getActiveDeviceIps(devices: Array<{ ipAddr: string }>) {
-  const activeDeviceIps = devices
-    .map((device) => normalizeAddress(device.ipAddr))
-    .filter((ipAddr) => ipAddr.length > 0 && !isLoopbackAddress(ipAddr));
-
-  return Array.from(new Set(activeDeviceIps));
+  return Array.from(new Set(activeDeviceIds));
 }
 
 function toLicenseResponse(
@@ -1081,7 +1065,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           maxDevices: true,
           devices: {
             select: {
-              ipAddr: true,
+              deviceId: true,
             },
           },
         },
@@ -1091,7 +1075,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         licenses: licenses.map((license: (typeof licenses)[number]) => ({
           ...toLicenseResponse(license),
           deviceCount: countActiveDevices(license.devices),
-          deviceIps: getActiveDeviceIps(license.devices),
+          deviceIds: getActiveDeviceIds(license.devices),
         })),
       });
     }

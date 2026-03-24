@@ -71,7 +71,7 @@ if [ "${LOCAL_DEV_SKIP_BOOTSTRAP:-0}" = "1" ]; then
   echo "[local-dev] skip bootstrap (LOCAL_DEV_SKIP_BOOTSTRAP=1)"
 else
   if ! pnpm run db:bootstrap:prod; then
-    echo "[local-dev] bootstrap failed. Check PostgreSQL and DATABASE_URL (ex: localhost:5532)." >&2
+    echo "[local-dev] bootstrap failed. Check PostgreSQL and DATABASE_URL (ex: localhost:5432)." >&2
     exit 1
   fi
 fi

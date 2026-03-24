@@ -22,7 +22,7 @@ type LicenseRecord = {
   blockReason?: LicenseBlockReason | null;
   blockNote?: string | null;
   maxDevices: number;
-  devices: { ipAddr: string }[];
+  devices: { deviceId: string }[];
   product?: {
     code: string;
     name: string;
@@ -66,7 +66,7 @@ function createMockPrisma(initialLicense: LicenseRecord | null) {
   syncLicenseRecords();
 
   const updateCalls: Array<{ where: { id: string }; data: { status: LicenseStatus } }> = [];
-  const createCalls: Array<{ licenseId: string; ipAddr: string }> = [];
+  const createCalls: Array<{ licenseId: string; deviceId: string }> = [];
   let lastWhere: FindUniqueArgs["where"] | null = null;
 
   const stub = {
@@ -95,12 +95,12 @@ function createMockPrisma(initialLicense: LicenseRecord | null) {
       },
     },
     licenseDevice: {
-      create: async ({ data }: { data: { licenseId: string; ipAddr: string } }) => {
+      create: async ({ data }: { data: { licenseId: string; deviceId: string } }) => {
         createCalls.push(data);
         if (license) {
           license = {
             ...license,
-            devices: [...license.devices, { ipAddr: data.ipAddr }],
+            devices: [...license.devices, { deviceId: data.deviceId }],
           };
           syncLicenseRecords();
         }
@@ -166,7 +166,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       payload: {
         licenseKey: "lic-hello-0000-0000-0000",
-        ipAddr: "finger1",
+        deviceId: "finger1",
       },
     });
 
@@ -197,7 +197,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       payload: {
         licenseKey: " lic-abcd-efgh-ijkl-mnop ",
-        ipAddr: "device-1",
+        deviceId: "device-1",
       },
     });
 
@@ -229,7 +229,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       payload: {
         licenseKey: "lic-1234-abcd-0000-0000",
-        ipAddr: "finger1",
+        deviceId: "finger1",
       },
     });
 
@@ -259,7 +259,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       payload: {
         licenseKey: suspendedLicense.licenseKey,
-        ipAddr: "finger1",
+        deviceId: "finger1",
       },
     });
 
@@ -292,7 +292,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       payload: {
         licenseKey: revokedLicense.licenseKey,
-        ipAddr: "finger1",
+        deviceId: "finger1",
       },
     });
 
@@ -305,7 +305,7 @@ describe("licenseRoutes /verify", () => {
     });
   });
 
-  test("falls back to x-forwarded-for header", async () => {
+  test("requires deviceId in the payload", async () => {
     const license: LicenseRecord = {
       id: "license-5",
       licenseKey: "LIC-AAAA-BBBB-CCCC-DDDD",
@@ -322,77 +322,14 @@ describe("licenseRoutes /verify", () => {
     const response = await app.inject({
       method: "POST",
       url: "/license/verify",
-      headers: { "x-forwarded-for": " 203.0.113.5, 10.0.0.1 " },
       payload: {
         licenseKey: license.licenseKey,
       },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(mock.createCalls).toEqual([
-      { licenseId: "license-5", ipAddr: "203.0.113.5" },
-    ]);
-  });
-
-  test("prefers forwarded ip when provided ip is loopback", async () => {
-    const license: LicenseRecord = {
-      id: "license-5b",
-      licenseKey: "LIC-AAAA-BBBB-CCCC-EEEE",
-      email: "owner@example.com",
-      productCode: "PROD",
-      expiresAt: addMilliseconds(new Date(), 1_000_000),
-      status: "active",
-      maxDevices: 3,
-      devices: [],
-    };
-    const mock = createMockPrisma(license);
-    app = await buildApp(mock.stub);
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/license/verify",
-      headers: { "x-forwarded-for": "14.33.25.123, 10.0.0.1" },
-      payload: {
-        licenseKey: license.licenseKey,
-        ipAddr: "127.0.0.1",
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(mock.createCalls).toEqual([
-      { licenseId: "license-5b", ipAddr: "14.33.25.123" },
-    ]);
-  });
-
-  test("does not register loopback as a device", async () => {
-    const license: LicenseRecord = {
-      id: "license-5c",
-      licenseKey: "LIC-AAAA-BBBB-CCCC-FFFF",
-      email: "owner@example.com",
-      productCode: "PROD",
-      expiresAt: addMilliseconds(new Date(), 1_000_000),
-      status: "active",
-      maxDevices: 1,
-      devices: [],
-    };
-    const mock = createMockPrisma(license);
-    app = await buildApp(mock.stub);
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/license/verify",
-      payload: {
-        licenseKey: license.licenseKey,
-        ipAddr: "127.0.0.1",
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      valid: true,
-      remainingDevices: 1,
-    });
-    expect(mock.createCalls).toHaveLength(0);
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ valid: false, reason: "missing_fields" });
+    expect(mock.createCalls).toEqual([]);
   });
 
   test("accepts existing devices without extra creation", async () => {
@@ -404,7 +341,7 @@ describe("licenseRoutes /verify", () => {
       expiresAt: addMilliseconds(new Date(), 1_000_000),
       status: "active",
       maxDevices: 3,
-      devices: [{ ipAddr: "KNOWN" }],
+      devices: [{ deviceId: "KNOWN" }],
     };
     const mock = createMockPrisma(license);
     app = await buildApp(mock.stub);
@@ -414,7 +351,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       payload: {
         licenseKey: license.licenseKey,
-        ipAddr: "KNOWN",
+        deviceId: "KNOWN",
       },
     });
 
@@ -435,7 +372,7 @@ describe("licenseRoutes /verify", () => {
       expiresAt: addMilliseconds(new Date(), 1_000_000),
       status: "active",
       maxDevices: 2,
-      devices: [{ ipAddr: "KNOWN" }],
+      devices: [{ deviceId: "KNOWN" }],
     };
 
     const mock = createMockPrisma(license);
@@ -446,7 +383,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       payload: {
         licenseKey: license.licenseKey,
-        ipAddr: "  new-device  ",
+        deviceId: "  new-device  ",
       },
     });
 
@@ -456,7 +393,7 @@ describe("licenseRoutes /verify", () => {
       remainingDevices: 0,
     });
     expect(mock.createCalls).toEqual([
-      { licenseId: "license-3", ipAddr: "new-device" },
+      { licenseId: "license-3", deviceId: "new-device" },
     ]);
   });
 
@@ -469,7 +406,7 @@ describe("licenseRoutes /verify", () => {
       expiresAt: addMilliseconds(new Date(), 1_000_000),
       status: "active",
       maxDevices: 1,
-      devices: [{ ipAddr: "known" }],
+      devices: [{ deviceId: "known" }],
     };
 
     const mock = createMockPrisma(license);
@@ -480,7 +417,7 @@ describe("licenseRoutes /verify", () => {
       url: "/license/verify",
       payload: {
         licenseKey: license.licenseKey,
-        ipAddr: "brand-new",
+        deviceId: "brand-new",
       },
     });
 

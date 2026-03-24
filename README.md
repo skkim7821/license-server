@@ -9,7 +9,7 @@
 - **라이선스 API**: `/license/verify` 검증 API와 `/license/user-info` 사용자 구매 목록 조회 API를 제공합니다.
 
 ## 환경 변수
-- `DATABASE_URL`: PostgreSQL 연결 문자열 (예: `postgresql://license:license@localhost:5532/license_server?schema=public`)
+- `DATABASE_URL`: PostgreSQL 연결 문자열 (예: `postgresql://license:license@localhost:5432/license_server?schema=public`)
 - `ADMIN_EMAIL`: 관리자 로그인 이메일 (`POST /admin/login`)
 - `ADMIN_PASSWORD`: 관리자 로그인 비밀번호
 - `ADMIN_JWT_SECRET`: 관리자 JWT 서명 키(설정 시 DB 기반 로그인 활성화)
@@ -168,7 +168,7 @@ pnpm docker:up
 - Frontend(Admin Web): `http://localhost:5174`
 - Backend Health: `http://localhost/health`
 - Backend Docs(개발 전용): `http://localhost/docs`
-- PostgreSQL(로컬 전용): `127.0.0.1:5532`
+- PostgreSQL(로컬 전용): `127.0.0.1:5432`
 
 참고:
 - 내부 테스트는 `deploy/docker/docker-compose.dev.yml`을 사용합니다.

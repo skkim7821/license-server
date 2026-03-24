@@ -32,11 +32,14 @@ fi
 echo "[dev-up] start postgres"
 "${COMPOSE[@]}" up -d --wait --wait-timeout "${WAIT_TIMEOUT}" postgres
 
+echo "[dev-up] start license-server"
+"${COMPOSE[@]}" up -d license-server
+
 echo "[dev-up] migrate"
-"${COMPOSE[@]}" run -T --rm --no-deps license-server pnpm prisma migrate deploy
+"${COMPOSE[@]}" exec -T license-server pnpm prisma migrate deploy
 
 echo "[dev-up] seed"
-"${COMPOSE[@]}" run -T --rm --no-deps license-server sh -lc "${SEED_COMMAND}"
+"${COMPOSE[@]}" exec -T license-server sh -lc "${SEED_COMMAND}"
 
 echo "[dev-up] start services"
 "${COMPOSE[@]}" up -d --wait --wait-timeout "${WAIT_TIMEOUT}" license-server admin-web edge-proxy
